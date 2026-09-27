@@ -82,11 +82,11 @@ async function startSound() {
   }
 }
 
-function startSpeech(words) {
+function startSpeech(words, lang = 'ru-RU') {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return (status.speech = 'unsupported');
   rec = new SR();
-  rec.lang = 'ru-RU';
+  rec.lang = lang;
   rec.continuous = true;
   rec.interimResults = true;
   recWanted = true;
@@ -170,8 +170,26 @@ export async function startMountain(settings, handlers) {
   jobs.push(startBattery());
   if (settings.wakeLock) jobs.push(keepAwake());
   await Promise.all(jobs);
-  if (settings.codeword) startSpeech(settings.codeWords);
+  if (settings.codeword) startSpeech(settings.codeWords, settings.speechLang);
   return status;
+}
+
+// Экономия заряда: выключаем микрофон и распознавание речи, падение и GPS продолжают работать
+export function saveBattery() {
+  if (audio) {
+    clearInterval(audio.id);
+    audio.stream.getTracks().forEach((t) => t.stop());
+    audio.ctx.close();
+    audio = null;
+    sound = null;
+    status.sound = 'saving';
+  }
+  if (rec) {
+    recWanted = false;
+    try { rec.stop(); } catch {}
+    rec = null;
+    status.speech = 'saving';
+  }
 }
 
 export function stopMountain() {

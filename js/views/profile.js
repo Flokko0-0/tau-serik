@@ -1,10 +1,12 @@
 import { state, save, log, reset, newFamilyCode } from '../store.js';
 import { app, on, age } from '../core.js';
 import { esc, icon, qrSvg, copy, toast, plural } from '../ui.js';
-import { EXP, EXP_NAME } from '../risk.js';
+import { EXP, expName } from '../risk.js';
 import { medText } from './alert.js';
 import { demoPanel } from './demo.js';
 import { disableMountain } from '../safety.js';
+import { aiMode } from '../ai.js';
+import { AI_PROXY } from '../config.js';
 
 export const BLOOD = ['O(I) Rh+', 'O(I) Rh−', 'A(II) Rh+', 'A(II) Rh−', 'B(III) Rh+', 'B(III) Rh−', 'AB(IV) Rh+', 'AB(IV) Rh−'];
 export const ALLERGY_HINTS = ['Пенициллин', 'Укусы пчёл', 'Орехи', 'Пыльца', 'Лактоза'];
@@ -21,7 +23,9 @@ export function contactsEditor() {
       ${p.contacts.map((c) => `<li class="row">
         <span class="row-ic">${icon(c.guardian ? 'shield-heart' : 'user')}</span>
         <div class="row-t"><b>${esc(c.name)}</b><span class="small muted">${esc(c.phone)}${c.guardian ? ' · законный представитель' : ''}</span></div>
-        <button class="icon-btn" data-act="delContact" data-arg="${c.id}" aria-label="Удалить ${esc(c.name)}">${icon('trash')}</button>
+        ${minor && c.guardian && p.contacts.filter((x) => x.guardian).length === 1
+          ? `<span class="icon-btn" title="До 18 лет родителя нельзя удалить: сначала добавьте другого представителя">${icon('lock')}</span>`
+          : `<button class="icon-btn" data-act="delContact" data-arg="${c.id}" aria-label="Удалить ${esc(c.name)}">${icon('trash')}</button>`}
       </li>`).join('') || `<li class="empty">${icon('users')}Пока никого. Добавьте хотя бы одного человека.</li>`}
     </ul>
     <form class="form-grid" data-form="contact">
@@ -57,6 +61,21 @@ export function medicalEditor() {
     <p class="small muted">${icon('lock', 'inline')}Медкарта хранится только на этом телефоне. Уходит близким и спасателям только вместе с SOS.</p>`;
 }
 
+function aiSettings() {
+  const s = state.settings;
+  const mode = aiMode();
+  const MODE = { proxy: 'подключён через сервер', key: 'подключён по ключу на этом телефоне', none: 'не подключён: работают встроенные ответы', offline: 'нет интернета: встроенные ответы', off: 'выключен' };
+  return `<p class="small">Помощник на Claude отвечает по-человечески и опирается на прогноз, маршрут и ваш опыт. Сейчас: <b>${MODE[mode]}</b>.</p>
+    ${AI_PROXY ? '' : `<form class="form-grid" data-form="aikey">
+      <div class="field"><label for="ai-key">Ключ Anthropic API</label>
+        <input id="ai-key" class="input mono" name="key" type="password" autocomplete="off" placeholder="${s.aiKey ? 'Ключ сохранён' : 'sk-ant-...'}"></div>
+      <p class="small muted">${icon('lock', 'inline')}Ключ хранится только на этом телефоне и не попадает в код сайта. Для всех пользователей подключите сервер-посредник (инструкция в tools/ai-proxy).</p>
+      <div class="row-btns two"><button class="btn btn-primary">${icon('check')}Сохранить ключ</button>${s.aiKey ? `<button type="button" class="btn" data-act="aiKeyDel">${icon('trash')}Удалить ключ</button>` : ''}</div>
+    </form>`}
+    <label class="toggle"><span><b>Выключить ИИ</b><small>Только встроенные ответы, вопросы никуда не отправляются</small></span>
+      <input type="checkbox" data-setting="aiOff" ${s.aiOff ? 'checked' : ''}><span class="switch" aria-hidden="true"><span></span></span></label>`;
+}
+
 function settings() {
   const s = state.settings;
   const sw = (key, title, text) => `<label class="toggle"><span><b>${title}</b><small>${text}</small></span>
@@ -71,7 +90,10 @@ function settings() {
       <div class="seg" role="group">${CD.map(([v, t]) => `<button class="${s.countdown === v ? 'on' : ''}" data-act="countdown" data-arg="${v}" aria-pressed="${s.countdown === v}">${t}</button>`).join('')}</div></div>
     <div class="field"><span class="field-l">Чувствительность к падению</span>
       <div class="seg" role="group">${SENS.map(([v, t]) => `<button class="${s.sensitivity === v ? 'on' : ''}" data-act="sens" data-arg="${v}" aria-pressed="${s.sensitivity === v}">${t}</button>`).join('')}</div></div>
+    <div class="field"><span class="field-l">Язык кодового слова</span>
+      <div class="seg" role="group">${[['ru-RU', 'Русский'], ['kk-KZ', 'Қазақша']].map(([v, t]) => `<button class="${s.speechLang === v ? 'on' : ''}" data-act="speechLang" data-arg="${v}" aria-pressed="${s.speechLang === v}">${t}</button>`).join('')}</div></div>
     ${sw('siren', 'Сирена при SOS', 'Помогает спасателям найти вас по звуку')}
+    ${sw('batterySaver', 'Экономия заряда', 'При 20% выключить микрофон и распознавание речи, оставить падение и GPS')}
     ${sw('wakeLock', 'Не гасить экран в горах', 'В браузере датчики работают, пока экран включён')}`;
 }
 
@@ -107,9 +129,10 @@ export default {
         <details class="card med-qr"><summary>${icon('qrcode')}QR медкарты для спасателей</summary><div class="qr">${qrSvg(medText())}</div><p class="small muted">Читается любой камерой без интернета. Можно поставить на экран блокировки.</p></details>
       </section>
       <section class="sec"><h2 class="h2">Опыт в горах</h2>
-        <div class="seg" role="group">${EXP.map((e) => `<button class="${p.experience === e ? 'on' : ''}" data-act="exp" data-arg="${e}" aria-pressed="${p.experience === e}">${EXP_NAME[e]}</button>`).join('')}</div>
+        <div class="seg" role="group">${EXP.map((e) => `<button class="${p.experience === e ? 'on' : ''}" data-act="exp" data-arg="${e}" aria-pressed="${p.experience === e}">${expName(e, p.gender)}</button>`).join('')}</div>
       </section>
       <section class="sec settings"><h2 class="h2">Защита в горах</h2>${settings()}</section>
+      <section class="sec" id="ai"><h2 class="h2">ИИ-помощник</h2>${aiSettings()}</section>
       <section class="sec demo-mobile"><h2 class="h2">Демо-пульт</h2>${demoPanel()}</section>
       <section class="sec">
         <button class="btn btn-block" data-act="newCode">${icon('refresh')}Сменить семейный код</button>
@@ -123,6 +146,18 @@ export default {
 };
 
 on({
+  speechLang: (v) => {
+    state.settings.speechLang = v;
+    save();
+    app.refresh();
+    if (state.mountain) toast('Язык заработает после перезапуска режима «В горах»');
+  },
+  aiKeyDel: () => {
+    delete state.settings.aiKey;
+    save();
+    toast('Ключ удалён с телефона');
+    app.refresh();
+  },
   copyLink: () => copy(guardianLink(), 'Ссылка для близкого скопирована'),
   delContact: (id) => {
     state.profile.contacts = state.profile.contacts.filter((c) => c.id !== id);
@@ -196,5 +231,15 @@ export function onMedAdd(kind, form) {
   const list = state.profile.medical[kind];
   if (!list.includes(v)) list.push(v);
   save();
+  app.refresh();
+}
+
+export function onAiKey(form) {
+  const key = String(new FormData(form).get('key')).trim();
+  if (!key.startsWith('sk-ant-')) return toast('Это не похоже на ключ Anthropic: он начинается с sk-ant-');
+  state.settings.aiKey = key;
+  state.settings.aiOff = false;
+  save();
+  toast('Ключ сохранён на этом телефоне. Спросите помощника');
   app.refresh();
 }

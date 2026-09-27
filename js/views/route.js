@@ -2,7 +2,7 @@ import { state, save, cache } from '../store.js';
 import { app, on, routeById, age, plan, startMs, online, hasMedical } from '../core.js';
 import { esc, icon, toast, RISK_CLASS } from '../ui.js';
 import { loadForecast, inWindow, wmo } from '../weather.js';
-import { assessRisk, LEVEL_NAME, EXP_NAME } from '../risk.js';
+import { assessRisk, LEVEL_NAME, expName } from '../risk.js';
 import { gearList } from '../gear.js';
 import { profileSvg, bindProfile } from '../chart.js';
 import { createMap, routeLayer, tilesFor, meMarker } from '../mapview.js';
@@ -88,6 +88,14 @@ function gearPart(r, s) {
     </fieldset>`).join('')}`;
 }
 
+function companionsPick() {
+  const peers = Object.values(state.company?.threads || {}).filter((t) => t.status === 'accepted');
+  if (!peers.length) return '<p class="small muted">Идёте с кем-то из «Компании»? Когда заявка принята, попутчика можно отметить здесь: близкие увидят, с кем вы.</p>';
+  return `<fieldset class="field bare"><legend class="field-l">Иду вместе с</legend>
+    ${peers.map((t) => `<label class="check"><input type="checkbox" name="comp" value="${esc(t.peer.name)}" checked><span class="box" aria-hidden="true">${icon('check')}</span><span>${esc(t.peer.name)}, ${t.peer.age}${t.peer.verified ? ' · eGov' : ''}</span></label>`).join('')}
+  </fieldset>`;
+}
+
 function confirmSheet(r) {
   const p = state.profile;
   const now = Date.now();
@@ -101,6 +109,7 @@ function confirmSheet(r) {
       <ul class="list tight">
         ${p.contacts.map((c) => `<li class="row"><span class="row-ic">${icon(c.guardian ? 'shield-heart' : 'user')}</span><div class="row-t"><b>${esc(c.name)}</b><span class="small muted">${esc(c.phone)}${c.guardian ? ' · законный представитель' : ''}</span></div></li>`).join('')}
       </ul>
+      ${companionsPick()}
       <label class="check"><input type="checkbox" id="st-mm" checked><span class="box" aria-hidden="true">${icon('check')}</span><span>Включить режим «В горах»: датчики падения, крика, кодового слова и GPS</span></label>
       <button class="btn btn-primary btn-block btn-lg" data-act="doStart">${icon('walk')}Выхожу на тропу</button>
     </div>
@@ -145,7 +154,7 @@ function body(r) {
         <div class="field"><span class="field-l" id="pl-g">Людей в группе</span>
           <div class="stepper" role="group" aria-labelledby="pl-g"><button class="icon-btn" data-act="group" data-arg="-1" aria-label="Меньше">${icon('minus')}</button><b>${p.group}</b><button class="icon-btn" data-act="group" data-arg="1" aria-label="Больше">${icon('plus')}</button></div></div>
       </div>
-      <p class="small muted">Возвращение около ${fmtTime(s + r.hours * 3600e3)} · опыт: ${EXP_NAME[state.profile?.experience || 'novice'].toLowerCase()}</p>
+      <p class="small muted">Возвращение около ${fmtTime(s + r.hours * 3600e3)} · опыт: ${expName(state.profile?.experience || 'novice', state.profile?.gender).toLowerCase()}</p>
     </section>
     <section class="sec">
       <div class="sec-h"><h2 class="h2">Погода наверху</h2></div>
@@ -282,8 +291,9 @@ on({
   doStart: async () => {
     const r = current;
     const mm = document.getElementById('st-mm')?.checked;
+    const comps = [...document.querySelectorAll('input[name="comp"]:checked')].map((i) => i.value);
     confirmOpen = false;
-    startTrip(r.id, returnBy(r, Date.now()), plan().group);
+    startTrip(r.id, returnBy(r, Date.now()), Math.max(plan().group, comps.length + 1), comps);
     toast('Поход начат. Близкие получили маршрут');
     app.go('home');
     if (mm && !state.mountain) await enableMountain();

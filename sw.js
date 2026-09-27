@@ -1,11 +1,12 @@
 // Офлайн: оболочка приложения в кэше, тайлы карты и шрифты кэшируются при просмотре, прогноз - последняя копия
-const VERSION = 'ts-v3';
+const VERSION = 'ts-v4';
 const SHELL = [
   './', 'index.html', 'guardian.html', 'manifest.webmanifest', 'icon.svg', 'css/app.css',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/qrcode.js',
   'js/app.js', 'js/core.js', 'js/store.js', 'js/ui.js', 'js/icons.js', 'js/iin.js', 'js/geo.js', 'js/time.js',
   'js/weather.js', 'js/risk.js', 'js/gear.js', 'js/detect.js', 'js/sensors.js', 'js/alarm.js', 'js/relay.js',
   'js/safety.js', 'js/assistant.js', 'js/mapview.js', 'js/chart.js', 'js/topo.js', 'js/guardian.js',
+  'js/p2p.js', 'js/company.js', 'js/ai.js', 'js/config.js', 'js/views/custom.js',
   'js/data/routes.js', 'js/data/places.js', 'js/data/firstaid.js', 'js/data/people.js',
   'js/views/home.js', 'js/views/routes.js', 'js/views/route.js', 'js/views/map.js', 'js/views/company.js',
   'js/views/aid.js', 'js/views/assistant.js', 'js/views/profile.js', 'js/views/onboarding.js',

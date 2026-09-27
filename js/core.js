@@ -9,7 +9,8 @@ export const app = { go: null, back: null, refresh: null, relay: null, screen: {
 export const actions = {};
 export const on = (obj) => Object.assign(actions, obj);
 
-export const routeById = (id) => ROUTES.find((r) => r.id === id);
+export const allRoutes = () => [...(state.customRoutes || []), ...ROUTES];
+export const routeById = (id) => allRoutes().find((r) => r.id === id);
 export const online = () => navigator.onLine && !state.demo.offline;
 export const age = () => (state.profile ? ageOn(state.profile.birth) : null);
 export const hasMedical = () => {

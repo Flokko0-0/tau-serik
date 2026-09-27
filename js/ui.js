@@ -10,6 +10,7 @@ export const RISK_CLASS = ['ok', 'warn', 'high', 'crit'];
 export function toast(text, kind = '') {
   const box = document.getElementById('toasts');
   if (!box) return;
+  while (box.children.length >= 2) box.firstElementChild.remove();
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
   el.setAttribute('role', 'status');

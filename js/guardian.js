@@ -1,6 +1,6 @@
 // Экран близкого: получает зашифрованные события по семейному коду
-import { listen } from './relay.js';
-import { esc, icon, toast, vibrate } from './ui.js';
+import { listen, postFamily, pushTopicFor } from './relay.js';
+import { esc, icon, toast, vibrate, copy } from './ui.js';
 import { toDD, toDMS } from './geo.js';
 import { fmtTime, fmtDay, ago } from './time.js';
 import { ROUTES } from './data/routes.js';
@@ -9,7 +9,19 @@ import { paintAll } from './topo.js';
 import * as alarm from './alarm.js';
 
 const $app = document.getElementById('app');
-const code = location.hash.replace(/\D/g, '');
+// Код из ссылки запоминается: в следующий раз страницу можно открыть без него
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+const code = location.hash.replace(/\D/g, '') || store.get('ts-guardian-code') || '';
+if (code.length === 8) store.set('ts-guardian-code', code);
+let who = store.get('ts-guardian-name') || '';
+let asked = null;
+let askWarned = false;
+let pushTopic = '';
+if (code.length === 8) pushTopicFor(code).then((t) => (pushTopic = t));
+const GRACE = 15 * 60e3;
 const S = { connected: false, name: '', g: 'm', status: 'none', trip: null, pos: null, sos: null, check: null, events: [], track: [] };
 let sound = false;
 let map = null;
@@ -27,7 +39,9 @@ const TEXT = {
   extend: (e) => `Контрольное время перенесено на ${fmtTime(e.returnBy)}`,
   home: (e) => `${gw('Вернулся', 'Вернулась')}: ${e.route || 'поход завершён'}`,
   battery: (e) => `Заряд ${e.level}%: пришла последняя точка`,
-  company: (e) => `Хочет пойти в компании: ${e.with}, ${e.route}`,
+  company: (e) => `Компания: ${e.with}, ${e.route}`,
+  warn: (e) => `Предупреждение: ${e.title}`,
+  ask: (e) => `${e.who || 'Близкий'} спросил(а): всё в порядке?`,
 };
 
 function apply(e, live) {
@@ -39,16 +53,18 @@ function apply(e, live) {
   }
   if (e.type !== 'pos') S.events.unshift(e);
   switch (e.type) {
-    case 'trip': S.trip = e; S.status = 'trip'; S.sos = null; S.track = e.pos ? [[e.pos.lat, e.pos.lon]] : []; break;
-    case 'extend': if (S.trip) S.trip.returnBy = e.returnBy; if (S.status === 'overdue') S.status = 'trip'; break;
+    case 'trip': S.trip = e; S.status = 'trip'; S.sos = null; S.warns = []; S.localOverdue = false; S.track = e.pos ? [[e.pos.lat, e.pos.lon]] : []; break;
+    case 'extend': if (S.trip) S.trip.returnBy = e.returnBy; if (S.status === 'overdue') S.status = 'trip'; S.localOverdue = false; break;
     case 'check': S.check = e; if (S.status !== 'sos') S.status = 'check'; break;
-    case 'ok': S.sos = null; S.check = null; S.status = S.trip ? 'trip' : 'none'; break;
+    case 'ok': S.sos = null; S.check = null; S.status = S.trip ? 'trip' : 'none'; asked = null; break;
+    case 'warn': (S.warns ||= []).unshift(e); break;
     case 'sos': S.sos = e; S.status = 'sos'; break;
     case 'overdue': if (S.status !== 'sos') S.status = 'overdue'; break;
     case 'home': S.trip = null; S.sos = null; S.status = 'home'; break;
     default: break;
   }
   if (live && ['sos', 'overdue', 'check'].includes(e.type)) raise(e);
+  if (live && e.type === 'warn') vibrate([200, 100, 200]);
   if (live && ['ok', 'home'].includes(e.type)) calm();
 }
 
@@ -83,9 +99,15 @@ function codeForm() {
   </main>`;
 }
 
+// Свой маршрут туриста приходит линией прямо в событии
+function routeOf(t) {
+  if (!t) return null;
+  return ROUTES.find((x) => x.id === t.routeId) || (t.line ? { id: t.routeId, title: t.route, custom: true, line: t.line, top: t.top || t.line[t.line.length - 1], start: t.start, maxEle: 0 } : null);
+}
+
 function statusCard() {
   const n = esc(S.name || 'Турист');
-  const r = S.trip && ROUTES.find((x) => x.id === S.trip.routeId);
+  const r = routeOf(S.trip);
   if (S.status === 'sos') {
     const e = S.sos;
     const p = e.pos;
@@ -111,12 +133,37 @@ function statusCard() {
   }
   const map = {
     none: ['hourglass', '', `Пока тихо. Когда ${n === 'Турист' ? 'турист' : n} начнёт поход, здесь появятся маршрут и точка.`],
-    trip: ['walk', 'ok', `${n} в походе${r ? `: ${esc(r.title)}` : ''}. Контрольное время ${fmtTime(S.trip?.returnBy)}.`],
+    trip: ['walk', 'ok', `${n} в походе${r ? `: ${esc(r.title)}` : ''}. Контрольное время ${fmtTime(S.trip?.returnBy)}.${S.trip?.companions?.length ? ` Идёт с: ${esc(S.trip.companions.join(', ').replace(/\.$/, ''))}.` : ''}`],
     check: ['alert-triangle', 'warn', `Сработал датчик: ${esc(S.check?.reason)}. Телефон ждёт ответа от ${n}.`],
-    overdue: ['clock-exclamation', 'high', `${n} ${gw('не отметился', 'не отметилась')} к контрольному времени ${fmtTime(S.trip?.returnBy)}. Позвоните. Если не отвечает - звоните 112 и передайте последнюю точку.`],
+    overdue: ['clock-exclamation', 'high', `${n} ${gw('не отметился', 'не отметилась')} к контрольному времени ${fmtTime(S.trip?.returnBy)}.${S.localOverdue ? ' Сигнала с телефона нет: возможно, сел заряд или нет связи.' : ''} Позвоните. Если не отвечает - звоните 112 и передайте последнюю точку.`],
     home: ['home', 'ok', `${n} ${gw('вернулся', 'вернулась')}. Поход завершён.`],
   }[S.status];
-  return `<section class="g-status g-${map[1]}">${icon(map[0] === 'hourglass' ? 'clock' : map[0])}<p>${map[2]}</p></section>`;
+  const warns = S.status === 'trip' ? (S.warns || []).slice(0, 2).map((w) => `<p class="callout warn">${icon('alert-triangle')}<span><b>${esc(w.title)}</b> ${esc(w.text || '')}</span></p>`).join('') : '';
+  return `<section class="g-status g-${map[1]}">${icon(map[0] === 'hourglass' ? 'clock' : map[0])}<p>${map[2]}</p></section>${warns}`;
+}
+
+function askBlock() {
+  if (!S.trip || S.status === 'home') return '';
+  if (asked) {
+    const waited = Date.now() - asked;
+    return `<p class="callout ${waited > 10 * 60e3 ? 'warn' : ''}">${icon('clock')}<span>${waited > 10 * 60e3 ? 'Ответа нет больше 10 минут. Позвоните. Возможно, в ущелье нет связи.' : 'Вопрос отправлен. Ждём ответа: он придёт сюда.'}</span></p>`;
+  }
+  return `<form class="ask-row" id="ask-form">
+    <label class="sr" for="g-who">Как вас подписать</label>
+    <input id="g-who" class="input" value="${esc(who)}" placeholder="Мама" maxlength="30">
+    <button class="btn btn-primary">${icon('message')}Спросить: всё в порядке?</button>
+  </form>`;
+}
+
+function pushBlock() {
+  return `<details class="card how">
+    <summary>${icon('bell-ringing')}Уведомления, когда страница закрыта</summary>
+    <ol class="steps small-steps">
+      <li><b>Установите ntfy</b><span>Бесплатное приложение для Android и iPhone (Google Play, App Store).</span></li>
+      <li><b>Подпишитесь на канал</b><span>В ntfy нажмите «+» и вставьте канал: <code class="mono">${esc(pushTopic)}</code> <button class="link" data-g="copyTopic">скопировать</button></span></li>
+      <li><b>Готово</b><span>При SOS, падении и невозвращении телефон громко уведомит. Координаты и медкарта только здесь, на этой странице.</span></li>
+    </ol>
+  </details>`;
 }
 
 function page() {
@@ -129,6 +176,7 @@ function page() {
       ${!sound ? `<button class="g-sound" data-g="sound">${icon('volume')}Включить звук тревоги на этом телефоне</button>` : ''}
       <div class="pad stack">
         ${statusCard()}
+        ${askBlock()}
         ${S.trip || S.pos ? `<div class="route-map g-map" data-map aria-label="Карта: маршрут и последняя точка"></div>
           ${S.pos ? `<p class="small muted">Последняя точка ${fmtTime(S.pos.t)}, ${ago(S.pos.t)} · ${toDD(S.pos.lat, S.pos.lon)}</p>` : ''}` : ''}
         <section class="sec">
@@ -136,7 +184,8 @@ function page() {
           ${S.events.length ? `<ol class="journal">${S.events.slice(0, 30).map((e) => `<li class="j-${e.type === 'sos' || e.type === 'overdue' ? 'crit' : e.type === 'check' ? 'warn' : e.type === 'ok' || e.type === 'home' ? 'ok' : 'info'}"><time>${fmtTime(e.t)}</time><span>${esc((TEXT[e.type] || (() => e.type))(e))}</span></li>`).join('')}</ol>`
             : '<p class="muted">Событий за последние 12 часов нет.</p>'}
         </section>
-        <p class="small muted">Код ${code.slice(0, 4)}-${code.slice(4)} · ${fmtDay(Date.now())}. Держите страницу открытой, чтобы услышать тревогу.</p>
+        ${pushBlock()}
+        <p class="small muted">Код ${code.slice(0, 4)}-${code.slice(4)} · ${fmtDay(Date.now())}. Если турист не отметится через 15 минут после контрольного времени, эта страница поднимет тревогу сама, даже если его телефон разрядился.</p>
       </div>
     </main>`;
 }
@@ -152,7 +201,7 @@ function draw() {
   $app.innerHTML = page();
   const el = $app.querySelector('[data-map]');
   if (el && window.L) {
-    const r = S.trip && ROUTES.find((x) => x.id === S.trip.routeId);
+    const r = routeOf(S.trip);
     map = createMap(el, { center: S.pos ? [S.pos.lat, S.pos.lon] : r ? r.top : [43.1, 77.02], zoom: 13 });
     layers = window.L.layerGroup().addTo(map.map);
     if (r) routeLayer(r).addTo(layers);
@@ -191,7 +240,38 @@ document.addEventListener('click', (e) => {
     draw();
   }
   if (el.dataset.g === 'calm') calm();
+  if (el.dataset.g === 'copyTopic') copy(pushTopic, 'Канал скопирован: вставьте его в ntfy');
 });
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'ask-form') return;
+  e.preventDefault();
+  who = document.getElementById('g-who').value.trim() || 'Близкий';
+  store.set('ts-guardian-name', who);
+  try {
+    await postFamily(code, { v: 1, type: 'ask', from: 'guardian', who, id: String(Date.now()), t: Date.now() });
+    asked = Date.now();
+    toast('Вопрос отправлен. У туриста появится кнопка «Всё хорошо»');
+  } catch {
+    toast('Не отправилось: нет сети');
+  }
+  draw();
+});
+
+// Контрольное время проверяется и здесь: тревога поднимется, даже если телефон туриста сел
+setInterval(() => {
+  if (S.status === 'trip' && S.trip?.returnBy && Date.now() > S.trip.returnBy + GRACE && !S.localOverdue) {
+    S.localOverdue = true;
+    S.status = 'overdue';
+    S.events.unshift({ type: 'overdue', t: Date.now(), returnBy: S.trip.returnBy, local: true });
+    raise({ type: 'overdue' });
+    draw();
+  }
+  if (asked && Date.now() - asked > 10 * 60e3 && !askWarned) {
+    askWarned = true;
+    draw();
+  }
+}, 20000);
 
 window.addEventListener('hashchange', () => location.reload());
 

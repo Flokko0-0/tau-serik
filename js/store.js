@@ -12,7 +12,7 @@ export function newFamilyCode() {
 function defaults() {
   return {
     profile: null,
-    settings: { fall: true, scream: true, codeword: true, codeWords: ['помогите', 'спасите'], countdown: 180, siren: true, sensitivity: 'normal', share: 'contacts', wakeLock: true },
+    settings: { fall: true, scream: true, codeword: true, codeWords: ['помогите', 'спасите', 'көмектесіңдер'], speechLang: 'ru-RU', countdown: 180, siren: true, sensitivity: 'normal', share: 'contacts', wakeLock: true, batterySaver: true },
     mountain: false,
     plan: {},
     trip: null,
@@ -26,6 +26,11 @@ function defaults() {
     demo: { offline: false, gps: false, walk: 0 },
     aid: {},
     cache: {},
+    company: { profile: null, posts: [], board: {}, threads: {}, blocked: [], reports: [], seen: [], tab: 'find' },
+    me: null,
+    stats: { hikes: 0 },
+    customRoutes: [],
+    asks: [],
   };
 }
 
@@ -35,7 +40,7 @@ function load() {
     if (raw) {
       const s = JSON.parse(raw);
       const d = defaults();
-      return { ...d, ...s, settings: { ...d.settings, ...s.settings }, demo: { ...d.demo, ...s.demo } };
+      return { ...d, ...s, settings: { ...d.settings, ...s.settings }, demo: { ...d.demo, ...s.demo }, company: { ...d.company, ...s.company }, stats: { ...d.stats, ...s.stats } };
     }
   } catch {
     // хранилище недоступно: работаем в памяти

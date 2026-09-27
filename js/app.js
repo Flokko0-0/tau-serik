@@ -1,8 +1,9 @@
 import { state, save } from './store.js';
 import { app, actions, online, APP_NAME } from './core.js';
 import { icon, esc, toast, initials, qrSvg } from './ui.js';
-import { createSender } from './relay.js';
-import { tick } from './safety.js';
+import { createSender, listen } from './relay.js';
+import { tick, tripWatch } from './safety.js';
+import { startNet, unread } from './company.js';
 import { status } from './sensors.js';
 import { fmtLeft } from './time.js';
 import { paintAll } from './topo.js';
@@ -11,14 +12,15 @@ import home, { live } from './views/home.js';
 import routes from './views/routes.js';
 import route, { onPlanInput, onGearToggle } from './views/route.js';
 import map from './views/map.js';
-import company, { onCompanyInput } from './views/company.js';
+import company, { onCompanyInput, onCompanyForm } from './views/company.js';
+import custom, { onCustomForm, onCustomInput } from './views/custom.js';
 import aid from './views/aid.js';
 import assistant, { ask } from './views/assistant.js';
-import profile, { onContactSubmit, onMedAdd } from './views/profile.js';
+import profile, { onContactSubmit, onMedAdd, onAiKey } from './views/profile.js';
 import onboarding, { onDraftInput } from './views/onboarding.js';
 import { demoPanel } from './views/demo.js';
 
-const VIEWS = { home, routes, route, map, company, aid, assistant, profile, onboarding };
+const VIEWS = { home, routes, route, custom, map, company, aid, assistant, profile, onboarding };
 const TABS = [['home', 'home', 'Главная'], ['routes', 'route', 'Маршруты'], ['map', 'map', 'Карта'], ['company', 'users', 'Компания'], ['aid', 'first-aid-kit', 'Помощь']];
 const $app = document.getElementById('app');
 const $overlay = document.getElementById('overlay');
@@ -52,7 +54,7 @@ function header(view, name, id) {
 
 function tabs(active) {
   return `<nav class="tabs" aria-label="Разделы">
-    ${TABS.map(([t, ic, label]) => `<button class="tab ${active === t ? 'on' : ''}" data-go="${t}" ${active === t ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span></button>`).join('')}
+    ${TABS.map(([t, ic, label]) => `<button class="tab ${active === t ? 'on' : ''}" data-go="${t}" ${active === t ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${t === 'company' ? '<b class="tab-badge" data-badge hidden></b>' : ''}</button>`).join('')}
   </nav>`;
 }
 
@@ -68,6 +70,15 @@ function renderSide() {
     <section class="side-card side-qr"><div class="qr">${qrSvg(url)}</div><p>Откройте на телефоне: там работают настоящие датчики падения, микрофон и GPS.</p></section>
   </div>`;
   paintAll($side);
+}
+
+function updateBadge() {
+  const b = $app.querySelector('[data-badge]');
+  if (!b) return;
+  const n = unread();
+  b.hidden = !n;
+  b.textContent = n > 9 ? '9+' : String(n);
+  b.setAttribute('aria-label', `непрочитанных: ${n}`);
 }
 
 function updateHeader() {
@@ -91,6 +102,9 @@ function render() {
   if (!view.mount || name !== 'profile' || !id) main.scrollTop = 0;
   paintAll($app);
   renderSide();
+  updateBadge();
+  startNet();
+  startFamily();
   document.title = view.title ? `${view.title} · ${APP_NAME}` : APP_NAME;
 }
 
@@ -108,7 +122,29 @@ function refresh() {
     paintAll($app);
   }
   updateHeader();
+  updateBadge();
   renderSide();
+}
+
+// Вопрос близкого «Всё в порядке?» с экрана близкого: слушаем семейный канал, пока есть сеть
+let familyCode = null;
+let stopFamily = null;
+const booted = Date.now();
+function startFamily() {
+  const code = state.profile?.done && state.profile.familyCode;
+  if (!code || code === familyCode) return;
+  stopFamily?.();
+  familyCode = code;
+  listen(code, (ev, t) => {
+    if (ev.from !== 'guardian' || ev.type !== 'ask') return;
+    const id = ev.id || String(ev.t);
+    if (state.asks.includes(id) || t < Math.min(booted, Date.now()) - 15 * 60e3) return;
+    state.asks.push(id);
+    if (state.asks.length > 50) state.asks.shift();
+    app.ask = { id, who: String(ev.who || 'Близкий').slice(0, 30), t: ev.t };
+    save();
+    app.renderAlert();
+  }).then((stop) => (stopFamily = stop)).catch(() => {});
 }
 
 app.go = (name, id = null) => {
@@ -122,6 +158,7 @@ app.go = (name, id = null) => {
 };
 app.back = () => (history.length > 1 ? history.back() : app.go('home'));
 app.refresh = refresh;
+app.badge = updateBadge;
 app.renderAlert = () => {
   renderAlert($overlay);
   if (state.alert.stage === 'idle') updateHeader();
@@ -166,6 +203,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset.plan) onPlanInput(el);
   if (el.dataset.gear) onGearToggle(el);
   if (el.dataset.company) onCompanyInput(el);
+  if (el.dataset.cu !== undefined) onCustomInput();
   if (el.dataset.setting) {
     const k = el.dataset.setting;
     let v = el.type === 'checkbox' ? el.checked : el.value;
@@ -185,6 +223,9 @@ document.addEventListener('submit', (e) => {
   if (kind === 'contact') onContactSubmit(f);
   else if (kind === 'allergies' || kind === 'chronic') onMedAdd(kind, f);
   else if (kind === 'ask') ask(f.elements.q.value);
+  else if (['anketa', 'hike', 'apply', 'chat'].includes(kind)) onCompanyForm(kind, f);
+  else if (kind === 'custom') onCustomForm(f);
+  else if (kind === 'aikey') onAiKey(f);
 });
 
 // Удержание для отмены тревоги
@@ -247,6 +288,7 @@ window.addEventListener('resize', () => {
 setInterval(() => {
   const now = Date.now();
   tick(now);
+  tripWatch(now);
   tickAlert($overlay);
   document.querySelectorAll('[data-left]').forEach((el) => (el.textContent = fmtLeft(Math.abs(Number(el.dataset.left) - now))));
   document.querySelectorAll('[data-since]').forEach((el) => (el.textContent = fmtLeft(now - Number(el.dataset.since))));

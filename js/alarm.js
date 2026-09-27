@@ -96,4 +96,12 @@ export const distress = () => loop('distress', 120, (t) => {
   for (let i = 0; i < 6; i++) tone(3150, t + i * 10, 1.4, 'sine', 0.8);
 });
 
+// Короткий сигнал предупреждения, не прерывает другие звуки
+export function chime() {
+  if (!unlockAudio()) return;
+  const t = ctx.currentTime + 0.02;
+  tone(880, t, 0.16, 'sine', 0.7);
+  tone(1320, t + 0.22, 0.24, 'sine', 0.7);
+}
+
 export const metronome = (bpm = 110) => loop('metronome', 60 / bpm, (t) => tone(1000, t, 0.05, 'square', 0.45));

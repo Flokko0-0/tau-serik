@@ -39,7 +39,7 @@ export function routeLayer(route, { start = true } = {}) {
   const L = window.L;
   const g = L.layerGroup();
   L.polyline(route.line, { color: '#fff8e6', weight: 8, opacity: 0.9, lineJoin: 'round', className: 'route-casing' }).addTo(g);
-  L.polyline(route.line, { color: '#f96015', weight: 4, opacity: 1, lineJoin: 'round', className: 'route-line' }).addTo(g);
+  L.polyline(route.line, { color: '#f96015', weight: 4, opacity: 1, lineJoin: 'round', className: 'route-line' + (route.custom ? ' custom' : '') }).addTo(g);
   if (start) {
     g.addLayer(L.marker(route.line[0], { icon: pin('flag', 'start'), title: 'Старт: ' + route.start, keyboard: false }));
     g.addLayer(L.marker(route.top, { icon: pin('mountain', 'top'), title: `Высшая точка, ${route.maxEle} м`, keyboard: false }));

@@ -7,6 +7,8 @@ export const LEVELS = ['easy', 'medium', 'hard', 'expert'];
 export const LEVEL_NAME = { easy: 'Лёгкий', medium: 'Средний', hard: 'Сложный', expert: 'Экспертный' };
 export const EXP = ['novice', 'basic', 'experienced'];
 export const EXP_NAME = { novice: 'Новичок', basic: 'Был в горах', experienced: 'Опытный' };
+const EXP_F = { novice: 'Новичок', basic: 'Была в горах', experienced: 'Опытная' };
+export const expName = (level, g) => (g === 'f' ? EXP_F : EXP_NAME)[level] || EXP_NAME.novice;
 export const VERDICT = ['Можно идти', 'Идти осторожно', 'Высокий риск', 'Не выходите'];
 
 // Примерный закат в Алматы по месяцам (UTC+5), если прогноза нет

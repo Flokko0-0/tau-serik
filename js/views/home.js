@@ -1,8 +1,8 @@
 import { state } from '../store.js';
 import { app, on, routeById, activeRoute, age, gw } from '../core.js';
-import { esc, icon, plural } from '../ui.js';
+import { esc, icon, plural, copy, toast } from '../ui.js';
 import { status } from '../sensors.js';
-import { enableMountain, disableMountain, endTrip, extendTrip, triggerCheck } from '../safety.js';
+import { enableMountain, disableMountain, endTrip, extendTrip, triggerCheck, activeWarns, routeSheet } from '../safety.js';
 import { PLACES } from '../data/places.js';
 import { nearest, fmtDist, compass } from '../geo.js';
 import { fmtTime, fmtLeft, ago } from '../time.js';
@@ -88,10 +88,17 @@ function trip() {
     </div>
     ${t.progress ? `<div class="progress" role="img" aria-label="Пройдено ${(done / 1000).toFixed(1)} из ${r.walkKm} км"><span style="width:${Math.round((done / total) * 100)}%"></span></div>
     <p class="small muted">Пройдено ${(done / 1000).toFixed(1).replace('.', ',')} км по треку${t.off > 150 ? ` · <b class="t-warn">вы в ${fmtDist(t.off)} от тропы</b>` : ''}</p>` : ''}
+    ${r.kind === 'out' && t.turnAt ? `<p class="small">${icon('arrow-back-up', 'inline')}Развернуться не позже <b>${fmtTime(t.turnAt)}</b>, если не дошли до цели</p>` : ''}
+    ${t.companions?.length ? `<p class="small">${icon('users', 'inline')}Идёте с: ${esc(t.companions.join(', '))}</p>` : ''}
+    ${activeWarns().slice(0, 3).map((w) => `<p class="callout ${w.level >= 3 ? 'crit' : 'warn'}">${icon('alert-triangle')}<span><b>${esc(w.title)}</b> ${esc(w.text)}</span></p>`).join('')}
     ${t.status === 'escalated' ? `<p class="callout crit">${icon('bell-ringing')}Близкие получили сигнал, что вы не вернулись. Отметьтесь, если всё хорошо.</p>` : ''}
     <div class="row-btns">
       <button class="btn btn-primary" data-act="home">${icon('home')}Я ${gw('вернулся', 'вернулась')}</button>
       <button class="btn" data-act="extend">${icon('clock')}+1 час</button>
+    </div>
+    <div class="row-btns two">
+      <button class="btn btn-ghost" data-act="sheet">${icon('share')}Маршрутный лист</button>
+      ${state.mountain ? `<button class="btn btn-ghost" data-act="pocket">${icon('moon')}Экран в карман</button>` : ''}
     </div>
   </section>`;
 }
@@ -157,6 +164,19 @@ on({
   mountainOff: () => disableMountain(),
   home: () => endTrip(),
   extend: () => extendTrip(60),
+  sheet: async () => {
+    const text = routeSheet();
+    try {
+      await navigator.share({ title: 'Маршрутный лист', text });
+    } catch {
+      copy(text, 'Маршрутный лист скопирован: отправьте близким или в службу спасения');
+    }
+  },
+  pocket: () => {
+    app.pocket = true;
+    app.renderAlert();
+    toast('Экран затемнён, датчики работают. Удерживайте, чтобы выйти');
+  },
   sosPress: () => {
     if (state.alert.stage === 'idle') triggerCheck('Нажата кнопка SOS', { sec: 5, manual: true });
   },

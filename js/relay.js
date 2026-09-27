@@ -11,6 +11,34 @@ async function sha256hex(text) {
 
 export const topicFor = async (code) => 'ts-' + (await sha256hex('tau-serik/topic/' + code)).slice(0, 32);
 
+// Отдельный канал push-уведомлений для приложения ntfy: только короткий текст без координат и медкарты
+export const pushTopicFor = async (code) => 'ts-push-' + (await sha256hex('tau-serik/push/' + code)).slice(0, 24);
+const PUSH = {
+  sos: [5, 'rotating_light', (e) => `${e.name}: SOS`, 'Нужна помощь. Координаты и медкарта на экране близкого'],
+  check: [4, 'warning', (e) => `${e.name}: сработал датчик`, 'Телефон ждёт ответа «Я в порядке»'],
+  overdue: [5, 'rotating_light', (e) => `${e.name}: не ${e.g === 'f' ? 'вернулась' : 'вернулся'} к сроку`, 'Контрольное время прошло, а отметки нет'],
+  battery: [4, 'battery', (e) => `${e.name}: садится телефон`, 'Пришла последняя точка на карте'],
+  warn: [3, 'warning', (e) => `${e.name}: предупреждение`, (e) => e.title || 'Опасность на маршруте'],
+  trip: [3, 'mountain', (e) => `${e.name} ${e.g === 'f' ? 'вышла' : 'вышел'} в горы`, (e) => e.route || 'Маршрут на экране близкого'],
+  home: [3, 'white_check_mark', (e) => `${e.name} ${e.g === 'f' ? 'вернулась' : 'вернулся'}`, 'Поход завершён'],
+  ok: [3, 'white_check_mark', (e) => `${e.name}: всё в порядке`, (e) => e.text || 'Тревога отменена'],
+};
+
+async function pushPing(code, ev) {
+  const p = PUSH[ev.type];
+  if (!p) return;
+  const [priority, tags, title, body] = p;
+  const click = new URL('guardian.html', location.href).href;
+  const q = new URLSearchParams({ title: title(ev), priority, tags, click });
+  await fetch(`${RELAY}/${await pushTopicFor(code)}?${q}`, { method: 'POST', body: typeof body === 'function' ? body(ev) : body }).catch(() => {});
+}
+
+// Экран близкого пишет туристу в тот же семейный канал (вопрос «всё в порядке?»)
+export async function postFamily(code, event) {
+  const res = await fetch(`${RELAY}/${await topicFor(code)}`, { method: 'POST', body: await seal(await keyFor(code), event) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+}
+
 const keys = new Map();
 export async function keyFor(code) {
   if (!keys.has(code)) {
@@ -54,6 +82,7 @@ export function createSender({ state, save, isOnline, onChange = () => {} }) {
         const ev = state.outbox[0];
         const res = await fetch(`${RELAY}/${topic}`, { method: 'POST', body: await seal(key, ev) });
         if (!res.ok) throw new Error('HTTP ' + res.status);
+        pushPing(code, ev);
         state.outbox.shift();
         save();
         onChange({ sent: ev });

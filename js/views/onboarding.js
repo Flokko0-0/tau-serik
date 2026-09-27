@@ -2,12 +2,27 @@ import { state, save, log, demoProfile, newFamilyCode } from '../store.js';
 import { app, on, APP_NAME } from '../core.js';
 import { esc, icon, toast, plural } from '../ui.js';
 import { parseIin, ageRules } from '../iin.js';
-import { EXP, EXP_NAME } from '../risk.js';
+import { EXP, expName } from '../risk.js';
 import { contactsEditor, medicalEditor } from './profile.js';
 
 const STEPS = ['id', 'contacts', 'medical', 'safety'];
 let egov = null;
-let draft = { name: '', iin: '', phone: '' };
+let draft = { name: '', iin: '', phone: '', consent: false, parent: false };
+
+const minorDraft = () => {
+  const r = parseIin(draft.iin);
+  return r.ok && r.age < 18;
+};
+const canVerify = () => parseIin(draft.iin).ok && draft.name.trim() && draft.consent && (!minorDraft() || draft.parent);
+
+function consentBox() {
+  return `<div class="consent" id="consent-box">
+    <label class="check"><input type="checkbox" data-draft="consent" ${draft.consent ? 'checked' : ''}><span class="box" aria-hidden="true">${icon('check')}</span>
+      <span>Согласен(на) на обработку персональных данных, в том числе медицинских, по Закону РК «О персональных данных и их защите». Данные хранятся на телефоне и передаются близким только вместе с SOS.</span></label>
+    ${minorDraft() ? `<label class="check"><input type="checkbox" data-draft="parent" ${draft.parent ? 'checked' : ''}><span class="box" aria-hidden="true">${icon('check')}</span>
+      <span>До 18 лет: родитель или законный представитель знает о регистрации и согласен. Он получит маршрут и SOS.</span></label>` : ''}
+  </div>`;
+}
 
 function welcome() {
   return `<div class="welcome">
@@ -61,6 +76,7 @@ function stepId() {
     <div class="stack">
       <div class="field"><label for="ob-name">Имя и фамилия</label><input id="ob-name" class="input" data-draft="name" value="${esc(draft.name)}" autocomplete="name" placeholder="Айым Нурланова"></div>
       <div class="field"><label for="ob-iin">ИИН</label><input id="ob-iin" class="input mono" data-draft="iin" value="${esc(draft.iin)}" inputmode="numeric" maxlength="14" autocomplete="off" placeholder="000000000000">${iinInfo()}</div>
+      ${egov?.verified ? '' : consentBox()}
       <div class="field"><label for="ob-phone">Телефон</label><input id="ob-phone" class="input" data-draft="phone" value="${esc(draft.phone)}" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 7__ ___ __ __"></div>
       ${egov?.verified ? `<p class="iin-ok">${icon('shield-check')}<span>Подтверждено через eGov<small>Имя, дата рождения и пол совпадают с данными госбазы</small></span></p>`
         : egov?.sent ? `<div class="card egov-box">
@@ -69,7 +85,7 @@ function stepId() {
             <p class="small muted">Демо: в прототипе eGov имитируется, ваш код <b class="mono">${egov.code}</b>. ИИН проверяется по настоящему алгоритму контрольной цифры.</p>
             <button class="btn btn-primary btn-block" data-act="obVerify">Подтвердить</button>
           </div>`
-        : `<button class="btn btn-block" data-act="obEgov" ${r.ok && draft.name.trim() ? '' : 'disabled'}>${icon('id-badge-2')}Подтвердить через eGov</button>`}
+        : `<button class="btn btn-block" data-act="obEgov" ${canVerify() ? '' : 'disabled'}>${icon('id-badge-2')}Подтвердить через eGov</button>`}
       <button class="btn btn-primary btn-block btn-lg" data-act="obNext" data-arg="contacts" ${egov?.verified ? '' : 'disabled'}>Дальше${icon('chevron-right')}</button>
     </div>`;
 }
@@ -98,7 +114,7 @@ function stepSafety() {
   return `${stepHead('safety', 'Как вас защищать', 'Датчики включаются только в режиме «В горах». Звук и движение обрабатываются на телефоне и никуда не записываются.')}
     <div class="stack">
       <div class="field"><span class="field-l">Опыт в горах</span>
-        <div class="seg" role="group">${EXP.map((e) => `<button class="${p.experience === e ? 'on' : ''}" data-act="exp" data-arg="${e}" aria-pressed="${p.experience === e}">${EXP_NAME[e]}</button>`).join('')}</div></div>
+        <div class="seg" role="group">${EXP.map((e) => `<button class="${p.experience === e ? 'on' : ''}" data-act="exp" data-arg="${e}" aria-pressed="${p.experience === e}">${expName(e, p.gender)}</button>`).join('')}</div></div>
       <div class="field"><span class="field-l">Сколько ждать вашего ответа после падения</span>
         <div class="seg" role="group">${CD.map(([v, t]) => `<button class="${s.countdown === v ? 'on' : ''}" data-act="countdown" data-arg="${v}" aria-pressed="${s.countdown === v}">${t}</button>`).join('')}</div>
         <p class="small muted">За это время можно нажать «Я в порядке». Потом SOS уйдёт сам.</p></div>
@@ -121,17 +137,15 @@ export default {
 };
 
 export function onDraftInput(el) {
-  draft[el.dataset.draft] = el.value;
+  draft[el.dataset.draft] = el.type === 'checkbox' ? el.checked : el.value;
   if (el.dataset.draft === 'iin') {
     const info = document.getElementById('iin-info');
     if (info) info.outerHTML = iinInfo();
-    const btn = document.querySelector('[data-act="obEgov"]');
-    if (btn) btn.disabled = !(parseIin(draft.iin).ok && draft.name.trim());
+    const box = document.getElementById('consent-box');
+    if (box) box.outerHTML = consentBox();
   }
-  if (el.dataset.draft === 'name') {
-    const btn = document.querySelector('[data-act="obEgov"]');
-    if (btn) btn.disabled = !(parseIin(draft.iin).ok && draft.name.trim());
-  }
+  const btn = document.querySelector('[data-act="obEgov"]');
+  if (btn) btn.disabled = !canVerify();
 }
 
 on({
@@ -142,7 +156,10 @@ on({
     app.go('onboarding', 'id');
   },
   obDemo: (kind) => {
-    state.profile = { ...demoProfile(kind), done: true };
+    state.profile = { ...demoProfile(kind), done: true, consent: { at: Date.now(), parent: kind === 'teen' ? true : null } };
+    state.company.profile = kind === 'teen'
+      ? { about: 'Хожу с подругами по выходным, родители в курсе. Люблю фотографировать горы.', tags: ['фото', 'спокойный темп'], only: 'f', prefs: 'Выходные, лёгкие маршруты', contactKind: 'phone', contact: '+7 707 000 11 22', visible: false }
+      : { about: 'Хожу по выходным, спокойный темп. Была на БАО и Кок-Жайляу, хочу на Кумбель.', tags: ['спокойный темп', 'фото'], only: 'all', prefs: 'Выходные, средние маршруты', contactKind: 'phone', contact: '+7 701 000 33 44', visible: false };
     state.settings.countdown = 30;
     save();
     log(`Демо-профиль: ${state.profile.name}`);
@@ -156,7 +173,7 @@ on({
   obVerify: () => {
     if ((draft.code || '').trim() !== egov.code) return toast('Код не совпадает');
     const r = parseIin(draft.iin);
-    Object.assign(state.profile, { name: draft.name.trim(), iin: r.iin, birth: r.birth, gender: r.gender, phone: draft.phone.trim(), verified: true, verifiedAt: Date.now() });
+    Object.assign(state.profile, { name: draft.name.trim(), iin: r.iin, birth: r.birth, gender: r.gender, phone: draft.phone.trim(), verified: true, verifiedAt: Date.now(), consent: { at: Date.now(), parent: r.age < 18 ? draft.parent : null } });
     egov.verified = true;
     save();
     app.refresh();

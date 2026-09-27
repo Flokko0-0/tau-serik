@@ -1,10 +1,10 @@
 import { state } from '../store.js';
-import { on, online, age, gw } from '../core.js';
+import { app, on, online, age, gw } from '../core.js';
 import { esc, icon, copy, qrSvg, toast, plural } from '../ui.js';
 import { toDD, toDMS } from '../geo.js';
 import { fmtTime } from '../time.js';
 import * as alarm from '../alarm.js';
-import { imOk, sendSOS, endTrip, extendTrip } from '../safety.js';
+import { imOk, sendSOS, endTrip, extendTrip, posPayload } from '../safety.js';
 
 const RING = 2 * Math.PI * 54;
 const clock = (s) => (s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : String(s));
@@ -51,14 +51,15 @@ function check(a) {
   return `<div class="ov ov-check" role="alertdialog" aria-modal="true" aria-labelledby="ov-t" aria-describedby="ov-d">
     <p class="ov-reason">${icon(a.manual ? 'urgent' : 'alert-triangle')}<b>${esc(a.reason)}</b>${a.detail ? `<span> · ${esc(a.detail)}</span>` : ''}</p>
     <h1 class="ov-title" id="ov-t">${a.manual ? 'Отправляю SOS' : 'Вы в порядке?'}</h1>
+    <p class="ov-kz" lang="kk">${a.manual ? 'SOS жіберілуде' : 'Бәрі жақсы ма?'}</p>
     <div class="ring" style="--total:${total}">
       <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" class="ring-bg"/><circle cx="60" cy="60" r="54" class="ring-fg" data-ring stroke-dasharray="${RING}" stroke-dashoffset="${RING * (1 - left / total)}"/></svg>
       <span class="ring-n" data-count="${a.deadline}">${clock(left)}</span>
     </div>
     <p class="ov-d" id="ov-d">${a.manual ? 'Через несколько секунд близкие получат ваши координаты и медкарту.' : 'Если не ответите, близкие получат SOS с координатами и медкартой, включится сирена.'}</p>
     <div class="ov-btns">
-      <button class="ov-ok" data-act="imOk">${icon(a.manual ? 'x' : 'check')}${a.manual ? 'Отмена' : 'Я в порядке'}</button>
-      <button class="ov-help" data-act="sosNow">${icon('urgent')}${a.manual ? 'Отправить сейчас' : 'Нужна помощь'}</button>
+      <button class="ov-ok" data-act="imOk">${icon(a.manual ? 'x' : 'check')}<span>${a.manual ? 'Отмена' : 'Я в порядке'}<small lang="kk">${a.manual ? 'Болдырмау' : 'Бәрі жақсы'}</small></span></button>
+      <button class="ov-help" data-act="sosNow">${icon('urgent')}<span>${a.manual ? 'Отправить сейчас' : 'Нужна помощь'}<small lang="kk">${a.manual ? 'Қазір жіберу' : 'Көмек керек'}</small></span></button>
     </div>
   </div>`;
 }
@@ -75,6 +76,7 @@ function sos(a) {
   return `<div class="ov ov-sos" role="alertdialog" aria-modal="true" aria-labelledby="ov-t">
     <div class="ov-sos-head">
       <h1 class="ov-title" id="ov-t">SOS отправлен</h1>
+      <p class="ov-kz" lang="kk">SOS жіберілді</p>
       <p>${fmtTime(a.since)} · ${esc(a.reason)}</p>
     </div>
     <ul class="deliv">
@@ -109,15 +111,16 @@ function overdue(a) {
   return `<div class="ov ov-overdue" role="alertdialog" aria-modal="true" aria-labelledby="ov-t">
     <p class="ov-reason">${icon('clock-exclamation')}<b>Контрольное время ${fmtTime(state.trip?.returnBy)} прошло</b></p>
     <h1 class="ov-title" id="ov-t">Вы вернулись?</h1>
+    <p class="ov-kz" lang="kk">Оралдыңыз ба?</p>
     <div class="ring small" style="--total:${Math.round((a.deadline - a.since) / 1000)}">
       <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" class="ring-bg"/><circle cx="60" cy="60" r="54" class="ring-fg" data-ring stroke-dasharray="${RING}" stroke-dashoffset="0"/></svg>
       <span class="ring-n" data-count="${a.deadline}">${clock(left)}</span>
     </div>
     <p class="ov-d">Если не ответите, близкие получат сигнал, что вы не вернулись, и вашу последнюю точку.</p>
     <div class="ov-btns">
-      <button class="ov-ok" data-act="home">${icon('home')}Да, я ${gw('вернулся', 'вернулась')}</button>
-      <button class="ov-mid" data-act="extend">${icon('clock')}Задерживаюсь, +1 час</button>
-      <button class="ov-help" data-act="sosNow">${icon('urgent')}Нужна помощь</button>
+      <button class="ov-ok" data-act="home">${icon('home')}<span>Да, я ${gw('вернулся', 'вернулась')}<small lang="kk">Иә, оралдым</small></span></button>
+      <button class="ov-mid" data-act="extend">${icon('clock')}<span>Задерживаюсь, +1 час<small lang="kk">Кешігіп жатырмын</small></span></button>
+      <button class="ov-help" data-act="sosNow">${icon('urgent')}<span>Нужна помощь<small lang="kk">Көмек керек</small></span></button>
     </div>
   </div>`;
 }
@@ -142,19 +145,41 @@ function medcard() {
   </div>`;
 }
 
+function pocket() {
+  return `<div class="pocket" role="dialog" aria-label="Экран в кармане">
+    <p class="pocket-t" data-clock>${fmtTime(Date.now())}</p>
+    <p class="pocket-s">Датчики работают: падение, крик, GPS${state.trip ? `<br>Контрольное время ${fmtTime(state.trip.returnBy)}` : ''}</p>
+    <button class="hold pocket-hold" data-hold="pocketOff"><span class="hold-fill"></span><span class="hold-t">Удерживайте, чтобы выйти</span></button>
+  </div>`;
+}
+
+function askCard(q) {
+  return `<div class="ask-card" role="alertdialog" aria-labelledby="ask-t">
+    <p id="ask-t"><b>${esc(q.who)}</b> спрашивает: всё в порядке?</p>
+    <div class="row-btns two">
+      <button class="btn btn-primary" data-act="askOk">${icon('check')}Всё хорошо</button>
+      <button class="btn btn-warn" data-act="askHelp">${icon('urgent')}Нужна помощь</button>
+    </div>
+  </div>`;
+}
+
 export function renderAlert(root) {
   const a = state.alert;
   let html = '';
   if (a.stage === 'check') html = check(a);
   else if (a.stage === 'sos') html = sos(a);
   else if (a.stage === 'overdue') html = overdue(a);
+  else if (app.ask) html = askCard(app.ask);
+  else if (app.pocket) html = pocket();
   if (a.stage !== 'idle' && root.dataset.med) html += medcard();
   if (root.dataset.strobe && a.stage === 'sos') html += '<button class="strobe" data-act="strobe" aria-label="Выключить вспышку"></button>';
   root.innerHTML = html;
-  document.body.classList.toggle('alerting', a.stage !== 'idle');
+  document.body.classList.toggle('alerting', a.stage !== 'idle' || !!app.pocket);
 }
 
 export function tickAlert(root) {
+  const clock = root.querySelector('[data-clock]');
+  if (clock) clock.textContent = fmtTime(Date.now());
   const el = root.querySelector('[data-count]');
   if (!el) return;
   const a = state.alert;
@@ -169,6 +194,20 @@ const root = () => document.getElementById('overlay');
 const rerender = () => renderAlert(root());
 
 on({
+  pocketOff: () => {
+    app.pocket = false;
+    rerender();
+  },
+  askOk: () => {
+    app.relay?.send('ok', { text: `Ответ на вопрос «${app.ask.who}»: всё хорошо`, pos: posPayload() });
+    app.ask = null;
+    toast('Отправлено: всё хорошо');
+    rerender();
+  },
+  askHelp: () => {
+    app.ask = null;
+    sendSOS('Ответ на вопрос близкого: нужна помощь', 'manual');
+  },
   imOk: () => imOk(),
   sosNow: () => {
     const a = state.alert;
