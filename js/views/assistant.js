@@ -2,7 +2,7 @@ import { state, cache, save } from '../store.js';
 import { app, on, age, activeRoute, startMs, routeById } from '../core.js';
 import { esc, icon } from '../ui.js';
 import { answer, classify, SUGGESTIONS } from '../assistant.js';
-import { askClaude, aiMode, parseQuestion, resolveStart, localBrief, AIError } from '../ai.js';
+import { askClaude, aiMode, aiName, parseQuestion, resolveStart, localBrief, AIError } from '../ai.js';
 import { ROUTES } from '../data/routes.js';
 import { PLACES } from '../data/places.js';
 import { AID } from '../data/firstaid.js';
@@ -22,8 +22,9 @@ function localContext() {
 const MODE_TEXT = {
   proxy: 'ИИ Claude отвечает по прогнозу, маршруту и вашему опыту.',
   key: 'ИИ Claude отвечает по прогнозу, маршруту и вашему опыту.',
+  gemini: 'ИИ Gemini отвечает по прогнозу, маршруту и вашему опыту.',
   offline: 'Нет интернета: отвечаю из встроенной базы, прогноза и треков на телефоне.',
-  none: 'Встроенные ответы без интернета. Чтобы говорить с ИИ Claude, подключите его в профиле.',
+  none: 'Встроенные ответы без интернета. Чтобы говорить с ИИ, подключите его в профиле.',
   off: 'ИИ выключен в профиле: отвечаю из встроенной базы.',
 };
 
@@ -58,11 +59,11 @@ export default {
   title: 'Помощник',
   render() {
     const mode = aiMode();
-    const live = mode === 'proxy' || mode === 'key';
+    const live = mode === 'proxy' || mode === 'key' || mode === 'gemini';
     return `<div class="chat">
       <div class="pad chat-head">
         <h1 class="h1">Помощник</h1>
-        <p class="muted small"><span class="pill pill-${live ? 'ok' : 'off'}">${live ? 'ИИ онлайн' : 'без ИИ'}</span> ${MODE_TEXT[mode]}</p>
+        <p class="muted small"><span class="pill pill-${live ? 'ok' : 'off'}">${live ? `${aiName()} онлайн` : 'без ИИ'}</span> ${MODE_TEXT[mode]}</p>
       </div>
       <ol class="msgs pad" aria-live="polite">
         <li class="msg bot"><p>Привет! Спроси как у друга: «завтра в 7 хочу на БАО, как там?», «что надеть на Кумбель?», «где ближайшая вода?». Я посмотрю прогноз наверху, оценку риска и твой опыт.</p></li>
@@ -124,7 +125,7 @@ export async function ask(q) {
   const mode = aiMode();
   const local = classify(text);
   const guide = local?.aid && AID.find((x) => x.id === local.aid);
-  if (mode !== 'proxy' && mode !== 'key') {
+  if (mode !== 'proxy' && mode !== 'key' && mode !== 'gemini') {
     chat.push({ a: await localAnswer(text) });
     app.refresh();
     return setTimeout(scrollEnd, 30);
@@ -137,7 +138,7 @@ export async function ask(q) {
   const i = chat.length - 1;
   try {
     await askClaude(text, history(), (chunk) => {
-      msg.text += chunk;
+      msg.text += chunk.replace(/[\u2014\u2013]/g, '-');
       const el = document.querySelector(`[data-i="${i}"] p`);
       if (el) el.textContent = msg.text;
     });

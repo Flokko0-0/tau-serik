@@ -1,7 +1,7 @@
-// ИИ-помощник на Claude: отвечает по-человечески, но опирается на данные приложения (прогноз, маршрут, риск, вещи).
-// Ключ не хранится в коде сайта: либо сервер-посредник (AI_PROXY), либо ключ, введённый на этом телефоне.
+// ИИ-помощник: отвечает по-человечески, но опирается на данные приложения (прогноз, маршрут, риск, вещи).
+// По умолчанию бесплатный Gemini; Claude - через сервер-посредник или ключ, введённый на этом телефоне.
 import { state, cache } from './store.js';
-import { AI_PROXY } from './config.js';
+import { AI_PROXY, GEMINI_KEY } from './config.js';
 import { allRoutes, routeById, activeRoute, age, online } from './core.js';
 import { loadForecast, inWindow, dayOf, wmo } from './weather.js';
 import { assessRisk, routeAllowed, LEVEL_NAME, expName } from './risk.js';
@@ -20,15 +20,20 @@ export const PERSONA = `Ты - Тау Серік, помощник в прило
 Опирайся только на данные приложения ниже: прогноз по часам, маршрут, оценку риска, список вещей, точки рядом. Не выдумывай погоду, цифры и факты. Если данных на нужную дату нет, так и скажи и подскажи, что можно сделать.
 Безопасность важнее всего. Если в данных есть гроза, сильный ветер, мороз, возвращение после заката, возрастное ограничение или маршрут сложнее опыта - скажи об этом прямо, но по-доброму, и предложи вариант: выйти раньше, выбрать маршрут проще, найти компанию.
 Если человек описывает травму, плохое самочувствие или опасность - сначала скажи нажать SOS или позвонить 112, затем 2-3 главных шага первой помощи. Не ставь диагнозов.
-Пиши обычным текстом без заголовков и без markdown. Для списка вещей можно короткий список через дефис. Время - по Алматы (UTC+5).`;
+Пиши обычным текстом без заголовков и без markdown, не используй длинное тире (только дефис). Для списка вещей можно короткий список через дефис. Время - по Алматы (UTC+5).`;
+
+const isClaudeKey = (k) => String(k || '').startsWith('sk-ant-');
 
 export function aiMode() {
   if (state.settings.aiOff) return 'off';
   if (!online()) return 'offline';
   if (state.settings.aiProxy || AI_PROXY) return 'proxy';
-  if (state.settings.aiKey) return 'key';
+  if (state.settings.aiKey) return isClaudeKey(state.settings.aiKey) ? 'key' : 'gemini';
+  if (GEMINI_KEY) return 'gemini';
   return 'none';
 }
+
+export const aiName = () => ({ proxy: 'Claude', key: 'Claude', gemini: 'Gemini' }[aiMode()] || null);
 
 // ---- Разбор вопроса: какой маршрут, какой день, во сколько ----
 
@@ -222,6 +227,66 @@ async function viaKey(key, context, messages, onText) {
   }
 }
 
+// Gemini: потоковый ответ через REST. Если модель перегружена, пробуем следующую бесплатную.
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
+
+async function viaGemini(key, context, messages, onText) {
+  const body = JSON.stringify({
+    system_instruction: { parts: [{ text: `${PERSONA}\n\nДанные приложения:\n${context}` }] },
+    contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+    generationConfig: { maxOutputTokens: 2048, thinkingConfig: { thinkingLevel: 'low' } },
+  });
+  let last = 'все модели заняты, попробуйте через минуту';
+  for (const model of GEMINI_MODELS) {
+    let res;
+    try {
+      res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body,
+      });
+    } catch {
+      throw new AIError('нет связи с сервером ИИ');
+    }
+    if (res.status === 429 || res.status >= 500) {
+      last = res.status === 429 ? 'лимит бесплатных вопросов, попробуйте через минуту' : 'модели ИИ сейчас перегружены';
+      continue;
+    }
+    if (res.status === 400 || res.status === 401 || res.status === 403) throw new AIError('ключ Gemini не подошёл');
+    if (!res.ok) throw new AIError(`ошибка ИИ ${res.status}`);
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let got = false;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        let data;
+        try {
+          data = JSON.parse(line.slice(5));
+        } catch {
+          continue;
+        }
+        const c = data.candidates?.[0];
+        for (const part of c?.content?.parts || []) {
+          if (part.text && !part.thought) {
+            got = true;
+            onText(part.text);
+          }
+        }
+        if (['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].includes(c?.finishReason) || data.promptFeedback?.blockReason) throw new AIError('refusal');
+      }
+    }
+    if (got) return;
+    last = 'пустой ответ';
+  }
+  throw new AIError(last);
+}
+
 // messages: [{ role: 'user' | 'assistant', content: string }], последний - вопрос пользователя
 export async function askClaude(question, history, onText) {
   const context = await buildContext(parseQuestion(question));
@@ -229,5 +294,6 @@ export async function askClaude(question, history, onText) {
   const mode = aiMode();
   if (mode === 'proxy') return viaProxy(state.settings.aiProxy || AI_PROXY, context, messages, onText);
   if (mode === 'key') return viaKey(state.settings.aiKey, context, messages, onText);
+  if (mode === 'gemini') return viaGemini(state.settings.aiKey || GEMINI_KEY, context, messages, onText);
   throw new AIError('ИИ не подключён');
 }

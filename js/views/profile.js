@@ -5,7 +5,7 @@ import { EXP, expName } from '../risk.js';
 import { medText } from './alert.js';
 import { demoPanel } from './demo.js';
 import { disableMountain } from '../safety.js';
-import { aiMode } from '../ai.js';
+import { aiMode, aiName } from '../ai.js';
 import { AI_PROXY } from '../config.js';
 
 export const BLOOD = ['O(I) Rh+', 'O(I) Rh−', 'A(II) Rh+', 'A(II) Rh−', 'B(III) Rh+', 'B(III) Rh−', 'AB(IV) Rh+', 'AB(IV) Rh−'];
@@ -64,12 +64,12 @@ export function medicalEditor() {
 function aiSettings() {
   const s = state.settings;
   const mode = aiMode();
-  const MODE = { proxy: 'подключён через сервер', key: 'подключён по ключу на этом телефоне', none: 'не подключён: работают встроенные ответы', offline: 'нет интернета: встроенные ответы', off: 'выключен' };
-  return `<p class="small">Помощник на Claude отвечает по-человечески и опирается на прогноз, маршрут и ваш опыт. Сейчас: <b>${MODE[mode]}</b>.</p>
+  const MODE = { proxy: 'Claude через сервер', key: 'Claude по ключу на этом телефоне', gemini: s.aiKey ? 'Gemini по ключу на этом телефоне' : 'Gemini, бесплатный ключ приложения', none: 'не подключён: работают встроенные ответы', offline: 'нет интернета: встроенные ответы', off: 'выключен' };
+  return `<p class="small">Помощник отвечает по-человечески и опирается на прогноз, маршрут и ваш опыт. Сейчас: <b>${MODE[mode]}</b>.</p>
     ${AI_PROXY ? '' : `<form class="form-grid" data-form="aikey">
-      <div class="field"><label for="ai-key">Ключ Anthropic API</label>
-        <input id="ai-key" class="input mono" name="key" type="password" autocomplete="off" placeholder="${s.aiKey ? 'Ключ сохранён' : 'sk-ant-...'}"></div>
-      <p class="small muted">${icon('lock', 'inline')}Ключ хранится только на этом телефоне и не попадает в код сайта. Для всех пользователей подключите сервер-посредник (инструкция в tools/ai-proxy).</p>
+      <div class="field"><label for="ai-key">Свой ключ Gemini или Claude (необязательно)</label>
+        <input id="ai-key" class="input mono" name="key" type="password" autocomplete="off" placeholder="${s.aiKey ? 'Ключ сохранён' : 'AIza… или sk-ant-…'}"></div>
+      <p class="small muted">${icon('lock', 'inline')}Свой ключ хранится только на этом телефоне. Без него работает общий бесплатный ключ Gemini.</p>
       <div class="row-btns two"><button class="btn btn-primary">${icon('check')}Сохранить ключ</button>${s.aiKey ? `<button type="button" class="btn" data-act="aiKeyDel">${icon('trash')}Удалить ключ</button>` : ''}</div>
     </form>`}
     <label class="toggle"><span><b>Выключить ИИ</b><small>Только встроенные ответы, вопросы никуда не отправляются</small></span>
@@ -236,7 +236,7 @@ export function onMedAdd(kind, form) {
 
 export function onAiKey(form) {
   const key = String(new FormData(form).get('key')).trim();
-  if (!key.startsWith('sk-ant-')) return toast('Это не похоже на ключ Anthropic: он начинается с sk-ant-');
+  if (!/^(sk-ant-|AIza|AQ\.)/.test(key)) return toast('Это не похоже на ключ: Gemini начинается с AIza или AQ., Claude - с sk-ant-');
   state.settings.aiKey = key;
   state.settings.aiOff = false;
   save();

@@ -1,0 +1,42 @@
+name: Публикация на GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ключ Gemini из секрета репозитория
+        env:
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+        run: |
+          test -n "$GEMINI_KEY" || { echo "Секрет GEMINI_KEY не задан"; exit 1; }
+          python3 - <<'PY'
+          import os
+          p = 'js/config.js'
+          s = open(p, encoding='utf-8').read()
+          s = s.replace("GEMINI_KEY = ''", "GEMINI_KEY = '" + os.environ['GEMINI_KEY'] + "'")
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
