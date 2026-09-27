@@ -1,5 +1,5 @@
 // Офлайн: оболочка приложения в кэше, тайлы карты и шрифты кэшируются при просмотре, прогноз - последняя копия
-const VERSION = 'ts-v1';
+const VERSION = 'ts-v2';
 const SHELL = [
   './', 'index.html', 'guardian.html', 'manifest.webmanifest', 'icon.svg', 'css/app.css',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/qrcode.js',
@@ -37,7 +37,7 @@ async function cacheFirst(req, name) {
   const hit = await c.match(req);
   if (hit) return hit;
   const res = await fetch(req);
-  if (res.ok) {
+  if (res.ok || res.type === 'opaque') {
     c.put(req, res.clone());
     if (name === TILES && Math.random() < 0.05) trim(TILES, MAX_TILES);
   }
