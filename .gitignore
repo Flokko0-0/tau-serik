@@ -2,3 +2,4 @@ tools/.cache/
 node_modules/
 .playwright-cli/
 tools/video/out/
+__pycache__/
