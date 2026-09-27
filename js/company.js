@@ -253,8 +253,12 @@ export async function startNet() {
       const p = cleanPost(JSON.parse(text));
       const c = co();
       if (!p || p.uid === state.me?.uid || c.blocked.includes(p.uid)) return;
-      if (p.kind === 'close') delete c.board[p.id];
-      else c.board[p.id] = p;
+      // Снять объявление может только его автор
+      if (p.kind === 'close') {
+        if (c.board[p.id]?.uid === p.uid) delete c.board[p.id];
+      } else if (!c.board[p.id] || c.board[p.id].uid === p.uid) {
+        c.board[p.id] = p;
+      }
       const cutoff = Date.now() - 3 * 86400e3;
       for (const [id, q] of Object.entries(c.board)) if (q.t < cutoff) delete c.board[id];
       save();
