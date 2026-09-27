@@ -7,6 +7,7 @@ import { ROUTES } from '../data/routes.js';
 import { PLACES } from '../data/places.js';
 import { AID } from '../data/firstaid.js';
 import { fmtDay } from '../time.js';
+import { t } from '../i18n.js';
 
 const chat = [];
 let busy = false;
@@ -30,9 +31,9 @@ const MODE_TEXT = {
 
 function chips(m) {
   const out = [];
-  if (m.guide) out.push(`<button class="chip" data-go="aid" data-id="${m.guide.id}">${icon(m.guide.icon)}Памятка: ${esc(m.guide.title)}</button>`);
+  if (m.guide) out.push(`<button class="chip" data-go="aid" data-id="${m.guide.id}">${icon(m.guide.icon)}${t('Памятка: {title}', { title: esc(t(m.guide.title)) })}</button>`);
   if (m.plan) out.push(`<button class="chip" data-act="aiPlan" data-arg="${esc(m.plan.routeId)}|${m.plan.day}|${m.plan.time}">${icon('route')}${esc(m.plan.label)}</button>`);
-  if (m.go) out.push(`<button class="chip" data-go="${m.go === 'route' ? 'route' : m.go}" data-id="${m.go === 'route' ? activeRoute()?.id ?? '' : ''}">${esc(m.goLabel || { routes: 'Маршруты', map: 'Карта', route: 'Маршрут' }[m.go])}</button>`);
+  if (m.go) out.push(`<button class="chip" data-go="${m.go === 'route' ? 'route' : m.go}" data-id="${m.go === 'route' ? activeRoute()?.id ?? '' : ''}">${esc(m.goLabel || t({ routes: 'Маршруты', map: 'Карта', route: 'Маршрут' }[m.go]))}</button>`);
   return out.length ? `<div class="msg-acts">${out.join('')}</div>` : '';
 }
 
@@ -40,7 +41,7 @@ function bubble(m, i) {
   if (m.me) return `<li class="msg me"><p>${esc(m.text)}</p></li>`;
   if (m.ai) {
     return `<li class="msg bot ai" ${m.pending ? 'data-streaming' : ''} data-i="${i}">
-      <p>${m.text ? esc(m.text) : '<span class="typing" aria-label="Печатает"><i></i><i></i><i></i></span>'}</p>
+      <p>${m.text ? esc(m.text) : `<span class="typing" aria-label="${t('Печатает')}"><i></i><i></i><i></i></span>`}</p>
       ${m.pending ? '' : chips(m)}
     </li>`;
   }
@@ -62,22 +63,22 @@ export default {
     const live = mode === 'proxy' || mode === 'key' || mode === 'gemini';
     return `<div class="chat">
       <div class="pad chat-head">
-        <h1 class="h1">Помощник</h1>
-        <p class="muted small"><span class="pill pill-${live ? 'ok' : 'off'}">${live ? `${aiName()} онлайн` : 'без ИИ'}</span> ${MODE_TEXT[mode]}</p>
+        <h1 class="h1">${t('Помощник')}</h1>
+        <p class="muted small"><span class="pill pill-${live ? 'ok' : 'off'}">${live ? t('{name} онлайн', { name: aiName() }) : t('без ИИ')}</span> ${t(MODE_TEXT[mode])}</p>
       </div>
       <ol class="msgs pad" aria-live="polite">
-        <li class="msg bot"><p>Привет! Спроси как у друга: «завтра в 7 хочу на БАО, как там?», «что надеть на Кумбель?», «где ближайшая вода?». Я посмотрю прогноз наверху, оценку риска и твой опыт.</p></li>
+        <li class="msg bot"><p>${t('Привет! Спроси как у друга: «завтра в 7 хочу на БАО, как там?», «что надеть на Кумбель?», «где ближайшая вода?». Я посмотрю прогноз наверху, оценку риска и твой опыт.')}</p></li>
         ${chat.map(bubble).join('')}
       </ol>
       <div class="chat-foot">
-        ${live ? '<p class="small muted">ИИ может ошибаться. В опасной ситуации сразу SOS или 112.</p>' : ''}
-        <div class="chips scroll" role="group" aria-label="Подсказки">
-          ${['Завтра в 7 хочу на БАО, как там?', ...SUGGESTIONS.slice(0, 5)].map((s) => `<button class="chip" data-act="ask" data-arg="${esc(s)}">${esc(s)}</button>`).join('')}
+        ${live ? `<p class="small muted">${t('ИИ может ошибаться. В опасной ситуации сразу SOS или 112.')}</p>` : ''}
+        <div class="chips scroll" role="group" aria-label="${t('Подсказки')}">
+          ${['Завтра в 7 хочу на БАО, как там?', ...SUGGESTIONS.slice(0, 5)].map((s) => t(s)).map((s) => `<button class="chip" data-act="ask" data-arg="${esc(s)}">${esc(s)}</button>`).join('')}
         </div>
         <form class="ask" data-form="ask">
-          <label class="sr" for="ask-q">Вопрос</label>
-          <input id="ask-q" class="input" name="q" autocomplete="off" maxlength="600" placeholder="Спросите что угодно про поход" ${busy ? 'disabled' : ''}>
-          <button class="icon-btn solid" aria-label="Спросить" ${busy ? 'disabled' : ''}>${icon('send')}</button>
+          <label class="sr" for="ask-q">${t('Вопрос')}</label>
+          <input id="ask-q" class="input" name="q" autocomplete="off" maxlength="600" placeholder="${t('Спросите что угодно про поход')}" ${busy ? 'disabled' : ''}>
+          <button class="icon-btn solid" aria-label="${t('Спросить')}" ${busy ? 'disabled' : ''}>${icon('send')}</button>
         </form>
       </div>
     </div>`;
@@ -96,7 +97,7 @@ function planChip(q) {
   const r = routeById(p.routeId);
   if (!r || (p.offset == null && !p.time)) return null;
   const { day, time, start } = resolveStart(p);
-  return { routeId: r.id, day, time, label: `Запланировать: ${r.title}, ${fmtDay(start)}, ${time}` };
+  return { routeId: r.id, day, time, label: t('Запланировать: {route}, {day}, {time}', { route: t(r.title), day: fmtDay(start), time }) };
 }
 
 function history() {
@@ -143,11 +144,11 @@ export async function ask(q) {
       if (el) el.textContent = msg.text;
     });
     msg.pending = false;
-    if (!msg.text.trim()) throw new AIError('пустой ответ');
+    if (!msg.text.trim()) throw new AIError(t('пустой ответ'));
   } catch (e) {
     chat.splice(i, 1);
-    const why = e instanceof AIError ? (e.message === 'refusal' ? 'ИИ не стал отвечать на этот вопрос' : `ИИ недоступен: ${e.message}`) : 'ИИ недоступен';
-    chat.push({ a: await localAnswer(text), note: `${why}. Ответ без ИИ.` });
+    const why = e instanceof AIError ? (e.message === 'refusal' ? t('ИИ не стал отвечать на этот вопрос') : t('ИИ недоступен: {why}', { why: e.message })) : t('ИИ недоступен');
+    chat.push({ a: await localAnswer(text), note: `${why}. ${t('Ответ без ИИ.')}` });
   } finally {
     busy = false;
     app.refresh();

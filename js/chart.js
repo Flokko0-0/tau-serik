@@ -1,4 +1,5 @@
 // Профиль высот маршрута: одна серия, площадь 12%, линия 2px, подпись высшей точки
+import { t, num, int } from './i18n.js';
 import { eleAt } from './geo.js';
 
 const W = 340;
@@ -29,7 +30,7 @@ export function profileSvg(route, { hereKm = null } = {}) {
   for (let k = 0; k <= s.km + 0.01; k += s.xStep) {
     grid += `<text x="${s.x(k)}" y="${H - 6}" class="ch-tick" text-anchor="middle">${k}${k === 0 ? '' : ''}</text>`;
   }
-  grid += `<text x="${W - P.r}" y="${H - 6}" class="ch-tick" text-anchor="end">км</text>`;
+  grid += `<text x="${W - P.r}" y="${H - 6}" class="ch-tick" text-anchor="end">${t('км')}</text>`;
   const top = route.profile.reduce((a, p) => (p[1] > a[1] ? p : a));
   const tx = s.x(top[0]);
   const anchor = tx > W - 70 ? 'end' : tx < P.l + 40 ? 'start' : 'middle';
@@ -38,12 +39,12 @@ export function profileSvg(route, { hereKm = null } = {}) {
     const hy = s.y(eleAt(route.profile, hereKm));
     here = `<line x1="${s.x(hereKm)}" x2="${s.x(hereKm)}" y1="${P.t}" y2="${H - P.b}" class="ch-here-line"/><circle cx="${s.x(hereKm)}" cy="${hy}" r="5" class="ch-here"/>`;
   }
-  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Профиль высот: от ${route.minEle} до ${route.maxEle} метров на ${s.km} км">
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="${t('Профиль высот: от {min} до {max} метров на {km} км', { min: route.minEle, max: route.maxEle, km: num(s.km) })}">
     ${grid}
     <path d="${area}" class="ch-area"/>
     <polyline points="${pts.join(' ')}" class="ch-line"/>
     <circle cx="${tx}" cy="${s.y(top[1])}" r="4" class="ch-dot"/>
-    <text x="${tx}" y="${s.y(top[1]) - 8}" class="ch-label" text-anchor="${anchor}">${top[1].toLocaleString('ru-RU')} м</text>
+    <text x="${tx}" y="${s.y(top[1]) - 8}" class="ch-label" text-anchor="${anchor}">${t('{n} м', { n: int(top[1]) })}</text>
     ${here}
     <g class="ch-hover" hidden><line y1="${P.t}" y2="${H - P.b}" class="ch-cross"/><circle r="4" class="ch-dot"/></g>
     <rect x="${P.l}" y="0" width="${W - P.l - P.r}" height="${H}" fill="transparent" class="ch-hit"/>
@@ -70,7 +71,7 @@ export function bindProfile(box, route, onHover) {
     g.querySelector('circle').setAttribute('cy', s.y(e));
     if (tip) {
       tip.hidden = false;
-      tip.textContent = `${km.toFixed(1).replace('.', ',')} км · ${Math.round(e).toLocaleString('ru-RU')} м`;
+      tip.textContent = `${t('{n} км', { n: num(km) })} · ${t('{n} м', { n: int(Math.round(e)) })}`;
       tip.style.left = `${(s.x(km) / W) * 100}%`;
     }
     onHover?.(km);

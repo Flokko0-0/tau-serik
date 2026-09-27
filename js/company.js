@@ -4,10 +4,12 @@ import { app, age, routeById } from './core.js';
 import { createIdentity, inboxOf, sendTo, publish, subscribe, openSealed, cleanPost, newId, BOARD } from './p2p.js';
 import { PEOPLE, GROUPS } from './data/people.js';
 import { toast, vibrate } from './ui.js';
+import { t } from './i18n.js';
 
 export const co = () => (state.company ||= { profile: null, posts: [], board: {}, threads: {}, blocked: [], reports: [], seen: [], tab: 'find' });
 export const group = (a) => (a < 14 ? 'child' : a < 18 ? 'teen' : 'adult');
 export const CONTACT_KINDS = { tg: 'Telegram', wa: 'WhatsApp', phone: 'Телефон' };
+export const contactKind = (k) => t(CONTACT_KINDS[k] || k);
 
 export function contactHref(c) {
   if (!c?.value) return null;
@@ -41,7 +43,7 @@ async function safePublish(obj) {
     await publish(obj);
     return true;
   } catch {
-    toast('Нет сети: объявление опубликуется, когда появится интернет');
+    toast(t('Нет сети: объявление опубликуется, когда появится интернет'));
     co().pending = true;
     save();
     return false;
@@ -71,7 +73,7 @@ export async function createHike(h) {
   co().posts.unshift(post);
   save();
   await safePublish(post);
-  log(`Опубликован поход: ${h.routeTitle}, ${h.day} ${h.time}`);
+  log(t('Опубликован поход: {route}, {day} {time}', { route: t(h.routeTitle), day: h.day, time: h.time }));
   if (age() < 18) app.relay?.send('company', { with: 'объявление о походе', route: h.routeTitle });
   // В демо на ваш поход через несколько секунд приходит заявка, чтобы показать сторону автора
   if (state.profile.demo) setTimeout(() => demoIncoming(post), 7000);
@@ -117,7 +119,7 @@ function push(th, msg) {
   if (!msg.me && !msg.sys) th.unread++;
 }
 
-export const unread = () => Object.values(co().threads).reduce((s, t) => s + (t.unread || 0), 0);
+export const unread = () => Object.values(co().threads).reduce((s, th) => s + (th.unread || 0), 0);
 
 function changed(notice, uid) {
   save();
@@ -137,7 +139,7 @@ async function deliver(th, obj) {
     await sendTo(th.peer.pub, { v: 1, id: newId(), from: myCard(), t: Date.now(), ...obj });
     return true;
   } catch {
-    push(th, { sys: true, text: 'Не отправилось: нет сети. Попробуйте ещё раз, когда появится связь.' });
+    push(th, { sys: true, text: t('Не отправилось: нет сети. Попробуйте ещё раз, когда появится связь.') });
     return false;
   }
 }
@@ -152,11 +154,11 @@ export async function apply(post, text) {
   th.postId = post.id;
   th.postTitle = post.routeTitle || routeById(post.route)?.title || 'Поход вместе';
   push(th, { me: true, text });
-  push(th, { sys: true, text: 'Заявка ушла автору. Он увидит вашу анкету и сообщение. Телефон и контакты не передаются.' });
+  push(th, { sys: true, text: t('Заявка ушла автору. Он увидит вашу анкету и сообщение. Телефон и контакты не передаются.') });
   save();
   await deliver(th, { type: 'request', postId: post.id, postTitle: th.postTitle, text });
   if (age() < 18) app.relay?.send('company', { with: peer.name, route: th.postTitle });
-  log(`Заявка: ${peer.name}, ${th.postTitle}`);
+  log(t('Заявка: {name}, {route}', { name: peer.name, route: t(th.postTitle) }));
   if (peer.demo) setTimeout(() => demoAnswer(th, post), 2500);
   changed();
   return th;
@@ -165,11 +167,11 @@ export async function apply(post, text) {
 export async function answer(uid, accepted) {
   const th = co().threads[uid];
   th.status = accepted ? 'accepted' : 'declined';
-  push(th, { sys: true, text: accepted ? 'Вы приняли заявку. Теперь можно переписываться и обменяться контактами.' : 'Вы отклонили заявку.' });
+  push(th, { sys: true, text: t(accepted ? 'Вы приняли заявку. Теперь можно переписываться и обменяться контактами.' : 'Вы отклонили заявку.') });
   save();
   await deliver(th, { type: 'answer', accepted, postId: th.postId });
   if (accepted && age() < 18) app.relay?.send('company', { with: th.peer.name, route: th.postTitle });
-  if (accepted && th.peer.demo) setTimeout(() => demoSay(th, 'Спасибо! Тогда до встречи. Напишу, если что-то изменится.'), 2000);
+  if (accepted && th.peer.demo) setTimeout(() => demoSay(th, t('Спасибо! Тогда до встречи. Напишу, если что-то изменится.')), 2000);
   changed();
 }
 
@@ -179,16 +181,16 @@ export async function sendChat(uid, text) {
   save();
   app.refresh?.();
   await deliver(th, { type: 'chat', text });
-  if (th.peer.demo) setTimeout(() => demoSay(th, DEMO_REPLIES[th.messages.length % DEMO_REPLIES.length]), 1800);
+  if (th.peer.demo) setTimeout(() => demoSay(th, t(DEMO_REPLIES[th.messages.length % DEMO_REPLIES.length])), 1800);
   changed();
 }
 
 export async function shareContact(uid) {
   const th = co().threads[uid];
   const c = co().profile;
-  if (!c?.contact) return toast('Укажите контакт в своей анкете');
+  if (!c?.contact) return toast(t('Укажите контакт в своей анкете'));
   th.shared = true;
-  push(th, { sys: true, text: `Вы поделились контактом: ${CONTACT_KINDS[c.contactKind]} ${c.contact}` });
+  push(th, { sys: true, text: t('Вы поделились контактом: {kind} {value}', { kind: contactKind(c.contactKind), value: c.contact }) });
   save();
   await deliver(th, { type: 'contact', contact: { kind: c.contactKind, value: c.contact } });
   if (th.peer.demo && !th.contact) setTimeout(() => demoContact(th), 1500);
@@ -200,14 +202,14 @@ export function block(uid) {
   if (!c.blocked.includes(uid)) c.blocked.push(uid);
   delete c.threads[uid];
   for (const [id, p] of Object.entries(c.board)) if (p.uid === uid) delete c.board[id];
-  log('Пользователь заблокирован');
-  changed('Заблокирован: вы больше не увидите его объявления и сообщения');
+  log(t('Пользователь заблокирован'));
+  changed(t('Заблокирован: вы больше не увидите его объявления и сообщения'));
 }
 
 export function report(uid, reason) {
   const c = co();
   c.reports.push({ uid, reason, t: Date.now() });
-  log(`Жалоба: ${reason}`);
+  log(t('Жалоба: {reason}', { reason: t(reason) }));
   block(uid);
 }
 
@@ -226,12 +228,12 @@ export async function handleInbox(m) {
     th.postTitle = m.postTitle;
     push(th, { text: String(m.text).slice(0, 600) });
     if (age() < 18) app.relay?.send('company', { with: th.peer.name, route: th.postTitle });
-    return changed(`Новая заявка от ${th.peer.name}`, f.uid);
+    return changed(t('Новая заявка от {name}', { name: th.peer.name }), f.uid);
   }
   if (m.type === 'answer') {
     th.status = m.accepted ? 'accepted' : 'declined';
-    push(th, { sys: true, text: m.accepted ? `${th.peer.name} принял(а) заявку. Можно переписываться.` : `${th.peer.name} отклонил(а) заявку.` });
-    return changed(m.accepted ? `${th.peer.name} принял(а) вашу заявку` : `${th.peer.name} отклонил(а) заявку`, f.uid);
+    push(th, { sys: true, text: t(m.accepted ? '{name} принял(а) заявку. Можно переписываться.' : '{name} отклонил(а) заявку.', { name: th.peer.name }) });
+    return changed(t(m.accepted ? '{name} принял(а) вашу заявку' : '{name} отклонил(а) заявку', { name: th.peer.name }), f.uid);
   }
   if (m.type === 'chat' && th.status === 'accepted') {
     push(th, { text: String(m.text).slice(0, 600) });
@@ -239,8 +241,8 @@ export async function handleInbox(m) {
   }
   if (m.type === 'contact' && th.status === 'accepted') {
     th.contact = { kind: m.contact?.kind, value: String(m.contact?.value || '').slice(0, 60) };
-    push(th, { sys: true, text: `${th.peer.name} поделился(ась) контактом` });
-    return changed(`${th.peer.name} поделился(ась) контактом`, f.uid);
+    push(th, { sys: true, text: t('{name} поделился(ась) контактом', { name: th.peer.name }) });
+    return changed(t('{name} поделился(ась) контактом', { name: th.peer.name }), f.uid);
   }
 }
 
@@ -296,20 +298,21 @@ function demoAnswer(th, post) {
   const novice = state.profile.experience === 'novice';
   if (post.id === 'p8' && novice) {
     th.status = 'declined';
-    push(th, { text: 'Извини, на кольцо с ночёвкой беру только с опытом ночёвок выше 3000 м. Давай сходим куда-нибудь попроще?' });
-    return changed(`${th.peer.name} отклонил заявку`, th.peer.uid);
+    push(th, { text: t('Извини, на кольцо с ночёвкой беру только с опытом ночёвок выше 3000 м. Давай сходим куда-нибудь попроще?') });
+    return changed(t('{name} отклонил(а) заявку', { name: th.peer.name }), th.peer.uid);
   }
   th.status = 'accepted';
-  push(th, { text: post.guide ? `Заявка принята. Сбор в 7:00, ${post.meet || 'точку встречи пришлю в чат'}. Инструктор проверит снаряжение.` : `Привет! Да, пойдём вместе. Встречаемся в 7:30, ${post.meet || 'точку встречи напишу'}.` });
-  changed(`${th.peer.name} принял(а) вашу заявку`, th.peer.uid);
+  const meet = post.meet ? t(post.meet) : t(post.guide ? 'точку встречи пришлю в чат' : 'точку встречи напишу');
+  push(th, { text: t(post.guide ? 'Заявка принята. Сбор в 7:00, {meet}. Инструктор проверит снаряжение.' : 'Привет! Да, пойдём вместе. Встречаемся в 7:30, {meet}.', { meet }) });
+  changed(t('{name} принял(а) вашу заявку', { name: th.peer.name }), th.peer.uid);
 }
 
 function demoContact(th) {
   if (!co().threads[th.peer.uid]) return;
   const n = 10 + (th.peer.name.length % 80);
   th.contact = { kind: 'phone', value: `+7 700 000 00 ${n}` };
-  push(th, { sys: true, text: `${th.peer.name} поделился(ась) контактом (демо-номер)` });
-  changed(`${th.peer.name} поделился(ась) контактом`, th.peer.uid);
+  push(th, { sys: true, text: t('{name} поделился(ась) контактом (демо-номер)', { name: th.peer.name }) });
+  changed(t('{name} поделился(ась) контактом', { name: th.peer.name }), th.peer.uid);
 }
 
 function demoIncoming(post) {
@@ -321,8 +324,8 @@ function demoIncoming(post) {
   th.status = 'incoming';
   th.postId = post.id;
   th.postTitle = post.routeTitle;
-  push(th, { text: `Привет! Можно с вами на «${post.routeTitle}»? ${p.about}` });
-  changed(`Новая заявка от ${p.name}`);
+  push(th, { text: t('Привет! Можно с вами на «{route}»?', { route: t(post.routeTitle) }) + ' ' + t(p.about) });
+  changed(t('Новая заявка от {name}', { name: t(p.name) }));
 }
 
 export const demoPosts = () => [

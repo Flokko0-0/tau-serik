@@ -6,6 +6,7 @@ import { createMap, routeLayer, placeMarker, meMarker, personMarker, KIND } from
 import { nearest, fmtDist, compass, dist, bearing } from '../geo.js';
 import { locateOnce } from '../sensors.js';
 import { nearbyPeople, onPos } from '../safety.js';
+import { t } from '../i18n.js';
 
 const LAYERS = ['rescue', 'hut', 'water', 'toilet', 'shelter', 'camp', 'people'];
 let ctx = null;
@@ -34,8 +35,8 @@ function drawLayers() {
 function listPart() {
   if (!state.pos) {
     return `<div class="map-empty">
-      <p>Определите, где вы, чтобы увидеть ближайшие укрытия, воду и спасателей.</p>
-      <button class="btn btn-primary" data-act="locate">${icon('current-location')}Где я?</button>
+      <p>${t('Определите, где вы, чтобы увидеть ближайшие укрытия, воду и спасателей.')}</p>
+      <button class="btn btn-primary" data-act="locate">${icon('current-location')}${t('Где я?')}</button>
     </div>`;
   }
   const from = [state.pos.lat, state.pos.lon];
@@ -46,7 +47,7 @@ function listPart() {
   return `<ul class="list">
     ${items.map((p) => `<li><button class="row" data-act="flyTo" data-arg="${p.lat},${p.lon}">
       <span class="row-ic k-${p.kind}">${icon(p.kind === 'people' ? 'user' : KIND[p.kind].icon)}</span>
-      <span class="row-t"><b>${esc(p.name)}</b><span class="small muted">${p.kind === 'people' ? `${esc(p.note)} · показывает себя на маршруте` : `${KIND[p.kind].name}${p.ele ? ` · ${p.ele} м` : ''}`}</span></span>
+      <span class="row-t"><b>${esc(t(p.name))}</b><span class="small muted">${p.kind === 'people' ? `${esc(t(p.note))} · ${t('показывает себя на маршруте')}` : `${t(KIND[p.kind].name)}${p.ele ? ` · ${t('{m} м', { m: p.ele })}` : ''}`}</span></span>
       <span class="row-end"><span class="dir" style="--brg:${Math.round(p.brg)}deg">${icon('arrow-up')}</span><span class="nowrap"><b>${fmtDist(p.d)}</b> ${compass(p.brg)}</span></span>
     </button></li>`).join('')}
   </ul>`;
@@ -55,17 +56,17 @@ function listPart() {
 function sheet() {
   return `<div class="map-sheet ${listOpen ? 'open' : ''}">
     <button class="map-sheet-h" data-act="toggleList" aria-expanded="${listOpen}">
-      <b>Рядом с вами</b><span class="small muted">${state.pos ? (state.pos.src === 'demo' ? 'демо-точка на маршруте' : `GPS ±${state.pos.acc} м`) : 'место неизвестно'}</span>${icon(listOpen ? 'chevron-down' : 'arrow-up')}
+      <b>${t('Рядом с вами')}</b><span class="small muted">${state.pos ? (state.pos.src === 'demo' ? t('демо-точка на маршруте') : `GPS ±${t('{m} м', { m: state.pos.acc })}`) : t('место неизвестно')}</span>${icon(listOpen ? 'chevron-down' : 'arrow-up')}
     </button>
     <div class="map-sheet-b">
       ${listPart()}
-      <div class="field inline"><label for="share">Меня видят</label>
+      <div class="field inline"><label for="share">${t('Меня видят')}</label>
         <select id="share" class="input" data-setting="share">
-          <option value="none" ${state.settings.share === 'none' ? 'selected' : ''}>Никто</option>
-          <option value="contacts" ${state.settings.share === 'contacts' ? 'selected' : ''}>Только близкие</option>
-          <option value="nearby" ${state.settings.share === 'nearby' ? 'selected' : ''}>Близкие и туристы рядом</option>
+          <option value="none" ${state.settings.share === 'none' ? 'selected' : ''}>${t('Никто')}</option>
+          <option value="contacts" ${state.settings.share === 'contacts' ? 'selected' : ''}>${t('Только близкие')}</option>
+          <option value="nearby" ${state.settings.share === 'nearby' ? 'selected' : ''}>${t('Близкие и туристы рядом')}</option>
         </select></div>
-      <p class="small muted">Точки: © участники OpenStreetMap. Людей рядом видно, только если они сами это разрешили. В демо они условные.</p>
+      <p class="small muted">${t('Точки: © участники OpenStreetMap. Людей рядом видно, только если они сами это разрешили. В демо они условные.')}</p>
     </div>
   </div>`;
 }
@@ -76,13 +77,13 @@ export default {
   full: true,
   render() {
     return `<div class="map-wrap">
-      <div class="map-full" data-map aria-label="Карта"></div>
-      <div class="map-chips chips" role="group" aria-label="Слои карты">
-        ${LAYERS.map((k) => `<button class="chip ${layerOn(k) ? 'on' : ''}" data-act="layer" data-arg="${k}" aria-pressed="${layerOn(k)}">${icon(k === 'people' ? 'users' : KIND[k].icon)}${k === 'people' ? 'Люди' : KIND[k].name}</button>`).join('')}
+      <div class="map-full" data-map aria-label="${t('Карта')}"></div>
+      <div class="map-chips chips" role="group" aria-label="${t('Слои карты')}">
+        ${LAYERS.map((k) => `<button class="chip ${layerOn(k) ? 'on' : ''}" data-act="layer" data-arg="${k}" aria-pressed="${layerOn(k)}">${icon(k === 'people' ? 'users' : KIND[k].icon)}${t(k === 'people' ? 'Люди' : KIND[k].name)}</button>`).join('')}
       </div>
       <div class="map-tools">
-        <button class="icon-btn solid" data-act="locate" aria-label="Где я">${icon('current-location')}</button>
-        <button class="icon-btn solid" data-act="base" aria-label="Сменить подложку">${icon('map')}</button>
+        <button class="icon-btn solid" data-act="locate" aria-label="${t('Где я?')}">${icon('current-location')}</button>
+        <button class="icon-btn solid" data-act="base" aria-label="${t('Сменить подложку')}">${icon('map')}</button>
       </div>
       <div data-part="sheet">${sheet()}</div>
     </div>`;
@@ -131,16 +132,16 @@ on({
       ctx?.map.setView([state.pos.lat, state.pos.lon], 15);
       return;
     }
-    toast('Определяем местоположение…');
+    toast(t('Определяем местоположение…'));
     const pos = await locateOnce();
-    if (!pos) return toast('Не удалось определить место. Разрешите геолокацию');
+    if (!pos) return toast(t('Не удалось определить место. Разрешите геолокацию'));
     onPos(pos);
     ctx?.map.setView([pos.lat, pos.lon], 14);
     app.refresh();
   },
   base: () => {
     const b = ctx?.toggleBase();
-    toast(b === 'topo' ? 'Топографическая карта' : 'Схема OpenStreetMap');
+    toast(t(b === 'topo' ? 'Топографическая карта' : 'Схема OpenStreetMap'));
   },
   flyTo: (arg) => {
     const [lat, lon] = arg.split(',').map(Number);

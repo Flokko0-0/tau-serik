@@ -3,8 +3,11 @@ import { state } from './store.js';
 import { ROUTES } from './data/routes.js';
 import { ageOn } from './iin.js';
 import { dayKey, fromLocal, parts } from './time.js';
+import { lang } from './i18n.js';
 
 export const APP_NAME = 'Тау Серік';
+// В английском интерфейсе название латиницей, иначе «ТАУ СЕРІК» читается как «TAY CEPIK»
+export const appName = () => (lang() === 'en' ? 'Tau Serik' : APP_NAME);
 export const app = { go: null, back: null, refresh: null, relay: null, screen: { name: 'home', id: null } };
 export const actions = {};
 export const on = (obj) => Object.assign(actions, obj);

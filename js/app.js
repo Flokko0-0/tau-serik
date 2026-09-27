@@ -1,6 +1,6 @@
 import { state, save } from './store.js';
-import { app, actions, online, APP_NAME } from './core.js';
-import { icon, esc, toast, initials, qrSvg } from './ui.js';
+import { app, actions, online, appName } from './core.js';
+import { icon, esc, toast, initials, qrSvg, langPicker } from './ui.js';
 import { createSender, listen } from './relay.js';
 import { tick, tripWatch } from './safety.js';
 import { startNet, unread } from './company.js';
@@ -19,6 +19,7 @@ import assistant, { ask } from './views/assistant.js';
 import profile, { onContactSubmit, onMedAdd, onAiKey } from './views/profile.js';
 import onboarding, { onDraftInput } from './views/onboarding.js';
 import { demoPanel } from './views/demo.js';
+import { t, setLang } from './i18n.js';
 
 const VIEWS = { home, routes, route, custom, map, company, aid, assistant, profile, onboarding };
 const TABS = [['home', 'home', 'Главная'], ['routes', 'route', 'Маршруты'], ['map', 'map', 'Карта'], ['company', 'users', 'Компания'], ['aid', 'first-aid-kit', 'Помощь']];
@@ -35,39 +36,42 @@ function parseHash() {
 function netButton() {
   const on = online();
   const q = state.outbox.length;
-  return `<button class="net ${on ? '' : 'off'}" data-go="profile" data-id="family" title="${on ? 'Есть сеть' : 'Нет сети'}${q ? `, в очереди ${q}` : ''}">
-    ${icon(on ? 'wifi' : 'wifi-off')}<span>${on ? (q ? `${q} в очереди` : 'Онлайн') : q ? `Офлайн · ${q}` : 'Офлайн'}</span></button>`;
+  return `<button class="net ${on ? '' : 'off'}" data-go="profile" data-id="family" title="${t(on ? 'Есть сеть' : 'Нет сети')}${q ? t(', в очереди {n}', { n: q }) : ''}">
+    ${icon(on ? 'wifi' : 'wifi-off')}<span>${on ? (q ? t('{n} в очереди', { n: q }) : t('Онлайн')) : q ? t('Офлайн · {n}', { n: q }) : t('Офлайн')}</span></button>`;
 }
 
+
 function header(view, name, id) {
-  const top = TABS.some(([t]) => t === name) && !id;
+  const top = TABS.some(([k]) => k === name) && !id;
   return `<header class="top">
     ${top
-      ? `<button class="brand" data-go="home" aria-label="${APP_NAME}, на главную"><span class="logo">${icon('mountain')}</span><span>${APP_NAME}</span></button>`
-      : `<button class="icon-btn" data-act="back" aria-label="Назад">${icon('chevron-left')}</button><span class="top-title">${esc(view.title || '')}</span>`}
+      ? `<button class="brand" data-go="home" aria-label="${t('{app}, на главную', { app: appName() })}"><span class="logo">${icon('mountain')}</span><span>${appName()}</span></button>`
+      : `<button class="icon-btn" data-act="back" aria-label="${t('Назад')}">${icon('chevron-left')}</button><span class="top-title">${esc(t(view.title || ''))}</span>`}
     <span class="top-sp"></span>
+    ${langPicker()}
     <span data-net>${netButton()}</span>
-    <button class="ava ava-me" data-go="profile" aria-label="Профиль">${esc(initials(state.profile?.name || '?'))}</button>
+    <button class="ava ava-me" data-go="profile" aria-label="${t('Профиль')}">${esc(initials(state.profile?.name || '?'))}</button>
     <button class="sos-btn" data-act="sosPress" aria-label="SOS">SOS</button>
   </header>`;
 }
 
 function tabs(active) {
-  return `<nav class="tabs" aria-label="Разделы">
-    ${TABS.map(([t, ic, label]) => `<button class="tab ${active === t ? 'on' : ''}" data-go="${t}" ${active === t ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${t === 'company' ? '<b class="tab-badge" data-badge hidden></b>' : ''}</button>`).join('')}
+  return `<nav class="tabs" aria-label="${t('Разделы')}">
+    ${TABS.map(([k, ic, label]) => `<button class="tab ${active === k ? 'on' : ''}" data-go="${k}" ${active === k ? 'aria-current="page"' : ''}>${icon(ic)}<span>${t(label)}</span>${k === 'company' ? '<b class="tab-badge" data-badge hidden></b>' : ''}</button>`).join('')}
   </nav>`;
 }
 
 function renderSide() {
   if (!$side || getComputedStyle($side).display === 'none') return;
   const url = location.href.split('#')[0];
+  $side.setAttribute('aria-label', t('О проекте и демо-пульт'));
   $side.innerHTML = `<div class="side-in">
     <canvas class="topo" aria-hidden="true"></canvas>
-    <div class="side-brand"><span class="logo">${icon('mountain')}</span><b>${APP_NAME}</b></div>
-    <h2 class="side-h">Безопасность в горах Заилийского Алатау</h2>
-    <p class="side-p">Оценка риска до выхода, автоматический SOS при падении или крике, связь с близкими и первая помощь без интернета.</p>
-    ${state.profile?.done ? `<section class="side-card"><h3 class="h3">Демо-пульт</h3>${demoPanel()}</section>` : `<p class="side-p">Выберите демо-профиль справа или создайте свой.</p>`}
-    <section class="side-card side-qr"><div class="qr">${qrSvg(url)}</div><p>Откройте на телефоне: там работают настоящие датчики падения, микрофон и GPS.</p></section>
+    <div class="side-brand"><span class="logo">${icon('mountain')}</span><b>${appName()}</b></div>
+    <h2 class="side-h">${t('Безопасность в горах Заилийского Алатау')}</h2>
+    <p class="side-p">${t('Оценка риска до выхода, автоматический SOS при падении или крике, связь с близкими и первая помощь без интернета.')}</p>
+    ${state.profile?.done ? `<section class="side-card"><h3 class="h3">${t('Демо-пульт')}</h3>${demoPanel()}</section>` : `<p class="side-p">${t('Выберите демо-профиль справа или создайте свой.')}</p>`}
+    <section class="side-card side-qr"><div class="qr">${qrSvg(url)}</div><p>${t('Откройте на телефоне: там работают настоящие датчики падения, микрофон и GPS.')}</p></section>
   </div>`;
   paintAll($side);
 }
@@ -78,7 +82,7 @@ function updateBadge() {
   const n = unread();
   b.hidden = !n;
   b.textContent = n > 9 ? '9+' : String(n);
-  b.setAttribute('aria-label', `непрочитанных: ${n}`);
+  b.setAttribute('aria-label', t('непрочитанных: {n}', { n }));
 }
 
 function updateHeader() {
@@ -105,7 +109,7 @@ function render() {
   updateBadge();
   startNet();
   startFamily();
-  document.title = view.title ? `${view.title} · ${APP_NAME}` : APP_NAME;
+  document.title = view.title ? `${t(view.title)} · ${appName()}` : appName();
 }
 
 function refresh() {
@@ -135,13 +139,13 @@ function startFamily() {
   if (!code || code === familyCode) return;
   stopFamily?.();
   familyCode = code;
-  listen(code, (ev, t) => {
+  listen(code, (ev, at) => {
     if (ev.from !== 'guardian' || ev.type !== 'ask') return;
     const id = ev.id || String(ev.t);
-    if (state.asks.includes(id) || t < Math.min(booted, Date.now()) - 15 * 60e3) return;
+    if (state.asks.includes(id) || at < Math.min(booted, Date.now()) - 15 * 60e3) return;
     state.asks.push(id);
     if (state.asks.length > 50) state.asks.shift();
-    app.ask = { id, who: String(ev.who || 'Близкий').slice(0, 30), t: ev.t };
+    app.ask = { id, who: String(ev.who || t('Близкий')).slice(0, 30), t: ev.t };
     save();
     app.renderAlert();
   }).then((stop) => (stopFamily = stop)).catch(() => {});
@@ -198,8 +202,23 @@ document.addEventListener('input', (e) => {
   }
 });
 
+// Смена языка: всё перерисовывается сразу, датчики и поход продолжают работать
+const SPEECH = { kk: 'kk-KZ', ru: 'ru-RU', en: 'en-US' };
+const WORD = { kk: 'көмектесіңдер', ru: 'помогите', en: 'help' };
+function switchLang(l) {
+  setLang(l);
+  const s = state.settings;
+  s.speechLang = SPEECH[l];
+  if (!s.codeWords.includes(WORD[l])) s.codeWords = [...s.codeWords, WORD[l]];
+  save();
+  render();
+  renderAlert($overlay);
+}
+app.switchLang = switchLang;
+
 document.addEventListener('change', (e) => {
   const el = e.target;
+  if (el.dataset.lang !== undefined) return switchLang(el.value);
   if (el.dataset.plan) onPlanInput(el);
   if (el.dataset.gear) onGearToggle(el);
   if (el.dataset.company) onCompanyInput(el);
@@ -211,7 +230,7 @@ document.addEventListener('change', (e) => {
     state.settings[k] = v;
     save();
     if (k === 'share') refresh();
-    if (state.mountain && ['fall', 'scream', 'codeword', 'codeWords', 'wakeLock'].includes(k)) toast('Изменение заработает после перезапуска режима «В горах»');
+    if (state.mountain && ['fall', 'scream', 'codeword', 'codeWords', 'wakeLock'].includes(k)) toast(t('Изменение заработает после перезапуска режима «В горах»'));
   }
 });
 
@@ -248,7 +267,7 @@ document.addEventListener('pointerdown', (e) => {
   const el = e.target.closest('[data-hold]');
   if (el) holdStart(el);
 });
-['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, holdEnd));
+['pointerup', 'pointercancel'].forEach((type) => document.addEventListener(type, holdEnd));
 document.addEventListener('pointerout', (e) => {
   if (hold && e.target === hold.el && !hold.el.contains(e.relatedTarget)) holdEnd();
 });

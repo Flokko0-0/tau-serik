@@ -1,9 +1,17 @@
 import { ICONS } from './icons.js';
+import { t, lang, LANGS } from './i18n.js';
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 
 export const icon = (name, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+
+// Выбор языка: короткая метка, под ней обычный список (удобный выбор на телефоне)
+export function langPicker(cls = '') {
+  const cur = LANGS.find(([l]) => l === lang());
+  return `<label class="lang ${cls}" title="Тіл · Язык · Language"><span>${cur[2]}</span>
+    <select data-lang aria-label="Тіл · Язык · Language">${LANGS.map(([l, name]) => `<option value="${l}" ${l === cur[0] ? 'selected' : ''} lang="${l}">${name}</option>`).join('')}</select></label>`;
+}
 
 export const RISK_CLASS = ['ok', 'warn', 'high', 'crit'];
 
@@ -23,9 +31,9 @@ export function toast(text, kind = '') {
 export async function copy(text, okMsg = 'Скопировано') {
   try {
     await navigator.clipboard.writeText(text);
-    toast(okMsg);
+    toast(t(okMsg));
   } catch {
-    toast('Не удалось скопировать: выделите текст вручную');
+    toast(t('Не удалось скопировать: выделите текст вручную'));
   }
 }
 

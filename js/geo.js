@@ -1,4 +1,6 @@
 // Геометрия на сфере: точки как [lat, lon]
+import { lang, t, num } from './i18n.js';
+
 const R = 6371000;
 const rad = (d) => (d * Math.PI) / 180;
 
@@ -15,12 +17,16 @@ export function bearing(a, b) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-const DIRS = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-export const compass = (deg) => DIRS[Math.round(deg / 45) % 8];
+const DIRS = {
+  ru: ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'],
+  kk: ['С', 'СШ', 'Ш', 'ОШ', 'О', 'ОБ', 'Б', 'СБ'],
+  en: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'],
+};
+export const compass = (deg) => DIRS[lang()][Math.round(deg / 45) % 8];
 
 export function fmtDist(m) {
-  if (m < 950) return `${Math.max(10, Math.round(m / 10) * 10)} м`;
-  return `${(m / 1000).toFixed(m < 9950 ? 1 : 0).replace('.', ',')} км`;
+  if (m < 950) return t('{n} м', { n: Math.max(10, Math.round(m / 10) * 10) });
+  return t('{n} км', { n: num(m / 1000, m < 9950 ? 1 : 0) });
 }
 
 function dms(v, pos, neg) {
@@ -30,7 +36,11 @@ function dms(v, pos, neg) {
   const s = total % 60;
   return `${d}°${String(m).padStart(2, '0')}′${String(s).padStart(2, '0')}″ ${v >= 0 ? pos : neg}`;
 }
-export const toDMS = (lat, lon) => `${dms(lat, 'с. ш.', 'ю. ш.')}  ${dms(lon, 'в. д.', 'з. д.')}`;
+const HEMI = { ru: ['с. ш.', 'ю. ш.', 'в. д.', 'з. д.'], kk: ['с. е.', 'о. е.', 'ш. б.', 'б. б.'], en: ['N', 'S', 'E', 'W'] };
+export const toDMS = (lat, lon) => {
+  const h = HEMI[lang()];
+  return `${dms(lat, h[0], h[1])}  ${dms(lon, h[2], h[3])}`;
+};
 export const toDD = (lat, lon) => `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 
 export function cumulative(line) {

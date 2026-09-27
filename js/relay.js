@@ -1,5 +1,7 @@
 // Канал с близкими через ntfy.sh по семейному коду. Сообщения шифруются AES-256-GCM ключом из кода:
 // посредник видит только шифр. Без сети сообщения ждут в очереди и уходят, когда связь появится.
+import { t } from './i18n.js';
+
 const RELAY = 'https://ntfy.sh';
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -13,15 +15,17 @@ export const topicFor = async (code) => 'ts-' + (await sha256hex('tau-serik/topi
 
 // Отдельный канал push-уведомлений для приложения ntfy: только короткий текст без координат и медкарты
 export const pushTopicFor = async (code) => 'ts-push-' + (await sha256hex('tau-serik/push/' + code)).slice(0, 24);
+// Текст уведомления - на языке телефона туриста
+const f = (e, m, w) => t(e.g === 'f' ? w : m, { name: e.name });
 const PUSH = {
-  sos: [5, 'rotating_light', (e) => `${e.name}: SOS`, 'Нужна помощь. Координаты и медкарта на экране близкого'],
-  check: [4, 'warning', (e) => `${e.name}: сработал датчик`, 'Телефон ждёт ответа «Я в порядке»'],
-  overdue: [5, 'rotating_light', (e) => `${e.name}: не ${e.g === 'f' ? 'вернулась' : 'вернулся'} к сроку`, 'Контрольное время прошло, а отметки нет'],
-  battery: [4, 'battery', (e) => `${e.name}: садится телефон`, 'Пришла последняя точка на карте'],
-  warn: [3, 'warning', (e) => `${e.name}: предупреждение`, (e) => e.title || 'Опасность на маршруте'],
-  trip: [3, 'mountain', (e) => `${e.name} ${e.g === 'f' ? 'вышла' : 'вышел'} в горы`, (e) => e.route || 'Маршрут на экране близкого'],
-  home: [3, 'white_check_mark', (e) => `${e.name} ${e.g === 'f' ? 'вернулась' : 'вернулся'}`, 'Поход завершён'],
-  ok: [3, 'white_check_mark', (e) => `${e.name}: всё в порядке`, (e) => e.text || 'Тревога отменена'],
+  sos: [5, 'rotating_light', (e) => `${e.name}: SOS`, () => t('Нужна помощь. Координаты и медкарта на экране близкого')],
+  check: [4, 'warning', (e) => t('{name}: сработал датчик', { name: e.name }), () => t('Телефон ждёт ответа «Я в порядке»')],
+  overdue: [5, 'rotating_light', (e) => f(e, '{name}: не вернулся к сроку', '{name}: не вернулась к сроку'), () => t('Контрольное время прошло, а отметки нет')],
+  battery: [4, 'battery', (e) => t('{name}: садится телефон', { name: e.name }), () => t('Пришла последняя точка на карте')],
+  warn: [3, 'warning', (e) => t('{name}: предупреждение', { name: e.name }), (e) => e.title || t('Опасность на маршруте')],
+  trip: [3, 'mountain', (e) => f(e, '{name} вышел в горы', '{name} вышла в горы'), (e) => (e.route ? t(e.route) : t('Маршрут на экране близкого'))],
+  home: [3, 'white_check_mark', (e) => f(e, '{name} вернулся', '{name} вернулась'), () => t('Поход завершён')],
+  ok: [3, 'white_check_mark', (e) => t('{name}: всё в порядке', { name: e.name }), (e) => e.text || t('Тревога отменена')],
 };
 
 async function pushPing(code, ev) {
@@ -30,7 +34,7 @@ async function pushPing(code, ev) {
   const [priority, tags, title, body] = p;
   const click = new URL('guardian.html', location.href).href;
   const q = new URLSearchParams({ title: title(ev), priority, tags, click });
-  await fetch(`${RELAY}/${await pushTopicFor(code)}?${q}`, { method: 'POST', body: typeof body === 'function' ? body(ev) : body }).catch(() => {});
+  await fetch(`${RELAY}/${await pushTopicFor(code)}?${q}`, { method: 'POST', body: body(ev) }).catch(() => {});
 }
 
 // Экран близкого пишет туристу в тот же семейный канал (вопрос «всё в порядке?»)

@@ -1,5 +1,5 @@
 // Офлайн: оболочка приложения в кэше, тайлы карты и шрифты кэшируются при просмотре, прогноз - последняя копия
-const VERSION = 'ts-v5';
+const VERSION = 'ts-v6';
 const SHELL = [
   './', 'index.html', 'guardian.html', 'manifest.webmanifest', 'icon.svg', 'css/app.css',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/qrcode.js',
@@ -11,6 +11,7 @@ const SHELL = [
   'js/views/home.js', 'js/views/routes.js', 'js/views/route.js', 'js/views/map.js', 'js/views/company.js',
   'js/views/aid.js', 'js/views/assistant.js', 'js/views/profile.js', 'js/views/onboarding.js',
   'js/views/alert.js', 'js/views/demo.js',
+  'js/i18n.js', 'js/i18n/ui.js', 'js/i18n/safety.js', 'js/i18n/social.js', 'js/i18n/aid.js', 'js/i18n/data.js',
 ];
 const TILES = 'ts-tiles';
 const FONTS = 'ts-fonts-2';

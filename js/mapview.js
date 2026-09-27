@@ -1,9 +1,10 @@
 // Карта Leaflet: топоподложка OpenTopoMap, маршрут, точки, люди рядом
 import { icon, esc, initials } from './ui.js';
+import { t } from './i18n.js';
 
 const TOPO = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
 const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const ATTR = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, SRTM, стиль © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a>';
+const ATTR = () => `© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, SRTM, ${t('стиль')} © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a>`;
 
 export const KIND = {
   rescue: { icon: 'lifebuoy', name: 'Спасатели' },
@@ -19,10 +20,10 @@ export function createMap(el, { center = [43.1, 77.02], zoom = 12 } = {}) {
   const L = window.L;
   const map = L.map(el, { zoomControl: false, attributionControl: true, zoomSnap: 0.5, tap: true }).setView(center, zoom);
   map.attributionControl.setPrefix(false);
-  const topo = L.tileLayer(TOPO, { subdomains: 'abc', maxZoom: 17, crossOrigin: 'anonymous', attribution: ATTR });
+  const topo = L.tileLayer(TOPO, { subdomains: 'abc', maxZoom: 17, crossOrigin: 'anonymous', attribution: ATTR() });
   const osm = L.tileLayer(OSM, { maxZoom: 19, crossOrigin: 'anonymous', attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' });
   topo.addTo(map);
-  L.control.zoom({ position: 'topright', zoomInTitle: 'Приблизить', zoomOutTitle: 'Отдалить' }).addTo(map);
+  L.control.zoom({ position: 'topright', zoomInTitle: t('Приблизить'), zoomOutTitle: t('Отдалить') }).addTo(map);
   let base = 'topo';
   return {
     map,
@@ -41,8 +42,8 @@ export function routeLayer(route, { start = true } = {}) {
   L.polyline(route.line, { color: '#fff8e6', weight: 8, opacity: 0.9, lineJoin: 'round', className: 'route-casing' }).addTo(g);
   L.polyline(route.line, { color: '#f96015', weight: 4, opacity: 1, lineJoin: 'round', className: 'route-line' + (route.custom ? ' custom' : '') }).addTo(g);
   if (start) {
-    g.addLayer(L.marker(route.line[0], { icon: pin('flag', 'start'), title: 'Старт: ' + route.start, keyboard: false }));
-    g.addLayer(L.marker(route.top, { icon: pin('mountain', 'top'), title: `Высшая точка, ${route.maxEle} м`, keyboard: false }));
+    g.addLayer(L.marker(route.line[0], { icon: pin('flag', 'start'), title: t('Старт: {place}', { place: t(route.start) }), keyboard: false }));
+    g.addLayer(L.marker(route.top, { icon: pin('mountain', 'top'), title: t('Высшая точка, {m} м', { m: route.maxEle }), keyboard: false }));
   }
   return g;
 }
@@ -53,8 +54,8 @@ export function pin(name, cls) {
 
 export function placeMarker(p, onClick) {
   const L = window.L;
-  const m = L.marker([p.lat, p.lon], { icon: pin(KIND[p.kind].icon, p.kind), title: p.name, keyboard: false });
-  m.bindTooltip(`${esc(p.name)}${p.ele ? `, ${p.ele} м` : ''}`, { direction: 'top', offset: [0, -14] });
+  const m = L.marker([p.lat, p.lon], { icon: pin(KIND[p.kind].icon, p.kind), title: t(p.name), keyboard: false });
+  m.bindTooltip(`${esc(t(p.name))}${p.ele ? `, ${t('{m} м', { m: p.ele })}` : ''}`, { direction: 'top', offset: [0, -14] });
   if (onClick) m.on('click', () => onClick(p));
   return m;
 }
@@ -63,14 +64,14 @@ export function meMarker(pos) {
   const L = window.L;
   const g = L.layerGroup();
   if (pos.acc && pos.acc < 2000) L.circle([pos.lat, pos.lon], { radius: pos.acc, className: 'me-acc', weight: 1 }).addTo(g);
-  L.marker([pos.lat, pos.lon], { icon: L.divIcon({ className: 'pin-me', html: '<span></span>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000, title: 'Вы здесь' }).addTo(g);
+  L.marker([pos.lat, pos.lon], { icon: L.divIcon({ className: 'pin-me', html: '<span></span>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000, title: t('Вы здесь') }).addTo(g);
   return g;
 }
 
 export function personMarker(p) {
   const L = window.L;
-  return L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'pin-person', html: `<span>${esc(initials(p.name))}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }), title: p.name })
-    .bindTooltip(`${esc(p.name)}: ${esc(p.note)}`, { direction: 'top', offset: [0, -14] });
+  return L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'pin-person', html: `<span>${esc(initials(t(p.name)))}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }), title: t(p.name) })
+    .bindTooltip(`${esc(t(p.name))}: ${esc(t(p.note))}`, { direction: 'top', offset: [0, -14] });
 }
 
 // Тайлы по рамке маршрута для офлайна (зумы 12-15, до ~200 штук)

@@ -4,8 +4,9 @@ import { esc, icon, toast } from '../ui.js';
 import { createMap, pin } from '../mapview.js';
 import { dist, fmtDist } from '../geo.js';
 import { fmtHours } from '../time.js';
-import { LEVELS, LEVEL_NAME } from '../risk.js';
+import { LEVELS, levelName } from '../risk.js';
 import { locateOnce } from '../sensors.js';
+import { t, num } from '../i18n.js';
 
 let ctx = null;
 let pts = [];
@@ -30,12 +31,12 @@ function calc(kind) {
 function summary() {
   const kind = document.getElementById('cu-kind')?.value || 'out';
   const c = calc(kind);
-  if (pts.length < 2) return `<p class="small muted">${pts.length ? 'Теперь нажмите на цель: вершину, озеро, перевал.' : 'Нажмите на карте точку старта.'}</p>`;
-  if (!c) return `<p class="small muted">${online() ? 'Загружаем высоты…' : 'Нет интернета: введите высоты вручную ниже.'}</p>`;
+  if (pts.length < 2) return `<p class="small muted">${t(pts.length ? 'Теперь нажмите на цель: вершину, озеро, перевал.' : 'Нажмите на карте точку старта.')}</p>`;
+  if (!c) return `<p class="small muted">${t(online() ? 'Загружаем высоты…' : 'Нет интернета: введите высоты вручную ниже.')}</p>`;
   return `<dl class="stats compact">
-    <div><dt>Путь</dt><dd>${c.walkKm.toFixed(1).replace('.', ',')} км</dd><small>по прямой ×1,4</small></div>
-    <div><dt>Набор</dt><dd>${c.up} м</dd><small>${ele[0]} → ${ele[1]} м</small></div>
-    <div><dt>Время</dt><dd>${fmtHours(c.hours)}</dd><small>обычный темп</small></div>
+    <div><dt>${t('Путь')}</dt><dd>${t('{n} км', { n: num(c.walkKm) })}</dd><small>${t('по прямой ×{k}', { k: num(WIND) })}</small></div>
+    <div><dt>${t('Набор')}</dt><dd>${t('{n} м', { n: c.up })}</dd><small>${ele[0]} → ${t('{n} м', { n: ele[1] })}</small></div>
+    <div><dt>${t('Время')}</dt><dd>${fmtHours(c.hours)}</dd><small>${t('обычный темп')}</small></div>
   </dl>`;
 }
 
@@ -59,7 +60,7 @@ async function fetchEle() {
     const data = await res.json();
     data.elevation.forEach((e, i) => (ele[i] = Math.round(e)));
   } catch {
-    toast('Не удалось загрузить высоты: введите вручную');
+    toast(t('Не удалось загрузить высоты: введите вручную'));
   }
   redrawMarkers();
 }
@@ -68,28 +69,28 @@ export default {
   tab: 'routes',
   title: 'Свой маршрут',
   render() {
-    return `<div class="route-map tall" data-map aria-label="Карта: нажмите старт и цель"></div>
+    return `<div class="route-map tall" data-map aria-label="${t('Карта: нажмите старт и цель')}"></div>
       <form class="pad stack" data-form="custom">
         <header class="page-h">
-          <h1 class="h1">Свой маршрут</h1>
-          <p class="muted">Кольсай, Чарын, Тургень или любая тропа. Отметьте старт и цель: приложение посчитает путь, набор высоты и время, загрузит прогноз и оценит риск.</p>
+          <h1 class="h1">${t('Свой маршрут')}</h1>
+          <p class="muted">${t('Кольсай, Чарын, Тургень или любая тропа. Отметьте старт и цель: приложение посчитает путь, набор высоты и время, загрузит прогноз и оценит риск.')}</p>
         </header>
         <div class="row-btns two">
-          <button type="button" class="btn" data-act="cuHere">${icon('current-location')}Старт - где я</button>
-          <button type="button" class="btn" data-act="cuReset">${icon('refresh')}Сбросить точки</button>
+          <button type="button" class="btn" data-act="cuHere">${icon('current-location')}${t('Старт - где я')}</button>
+          <button type="button" class="btn" data-act="cuReset">${icon('refresh')}${t('Сбросить точки')}</button>
         </div>
         <div data-part="cu-sum">${summary()}</div>
-        <div class="field"><label for="cu-name">Название</label><input id="cu-name" class="input" name="title" required maxlength="60" placeholder="Кольсай: первое - второе озеро"></div>
+        <div class="field"><label for="cu-name">${t('Название')}</label><input id="cu-name" class="input" name="title" required maxlength="60" placeholder="${t('Кольсай: первое - второе озеро')}"></div>
         <div class="form-2">
-          <div class="field"><label for="cu-level">Сложность</label><select id="cu-level" class="input" name="level">${LEVELS.map((l) => `<option value="${l}" ${l === 'medium' ? 'selected' : ''}>${LEVEL_NAME[l]}</option>`).join('')}</select></div>
-          <div class="field"><label for="cu-kind">Как идёте</label><select id="cu-kind" class="input" name="kind" data-cu><option value="out">Туда и обратно</option><option value="loop">В одну сторону или кольцо</option></select></div>
+          <div class="field"><label for="cu-level">${t('Сложность')}</label><select id="cu-level" class="input" name="level">${LEVELS.map((l) => `<option value="${l}" ${l === 'medium' ? 'selected' : ''}>${levelName(l)}</option>`).join('')}</select></div>
+          <div class="field"><label for="cu-kind">${t('Как идёте')}</label><select id="cu-kind" class="input" name="kind" data-cu><option value="out">${t('Туда и обратно')}</option><option value="loop">${t('В одну сторону или кольцо')}</option></select></div>
         </div>
         <div class="form-2">
-          <div class="field"><label for="cu-e0">Высота старта, м</label><input id="cu-e0" class="input" name="e0" data-cu type="number" inputmode="numeric" min="0" max="7500" required></div>
-          <div class="field"><label for="cu-e1">Высота цели, м</label><input id="cu-e1" class="input" name="e1" data-cu type="number" inputmode="numeric" min="0" max="7500" required></div>
+          <div class="field"><label for="cu-e0">${t('Высота старта, м')}</label><input id="cu-e0" class="input" name="e0" data-cu type="number" inputmode="numeric" min="0" max="7500" required></div>
+          <div class="field"><label for="cu-e1">${t('Высота цели, м')}</label><input id="cu-e1" class="input" name="e1" data-cu type="number" inputmode="numeric" min="0" max="7500" required></div>
         </div>
-        <p class="small muted">Линия проведена по прямой: реальная тропа извилистее. Для точного трека выберите маршрут из списка.</p>
-        <button class="btn btn-primary btn-block btn-lg">${icon('check')}Сохранить и оценить риск</button>
+        <p class="small muted">${t('Линия проведена по прямой: реальная тропа извилистее. Для точного трека выберите маршрут из списка.')}</p>
+        <button class="btn btn-primary btn-block btn-lg">${icon('check')}${t('Сохранить и оценить риск')}</button>
       </form>`;
   },
   mount(root) {
@@ -122,10 +123,10 @@ on({
   cuHere: async () => {
     let p = state.pos;
     if (!p) {
-      toast('Определяем место…');
+      toast(t('Определяем место…'));
       p = await locateOnce();
     }
-    if (!p) return toast('Не удалось определить место: нажмите старт на карте');
+    if (!p) return toast(t('Не удалось определить место: нажмите старт на карте'));
     pts = [[p.lat, p.lon]];
     ele = [p.alt ?? null, null];
     ctx?.map.setView(pts[0], 12);
@@ -136,7 +137,7 @@ on({
 
 export function onCustomForm(form) {
   const f = new FormData(form);
-  if (pts.length < 2) return toast('Отметьте на карте старт и цель');
+  if (pts.length < 2) return toast(t('Отметьте на карте старт и цель'));
   ele = [Number(f.get('e0')), Number(f.get('e1'))];
   const kind = f.get('kind');
   const c = calc(kind);
@@ -154,7 +155,7 @@ export function onCustomForm(form) {
   state.customRoutes = [route, ...(state.customRoutes || [])].slice(0, 20);
   state.plan.routeId = id;
   save();
-  log(`Свой маршрут: ${title}, ${fmtDist(c.walkKm * 1000)}`);
+  log(t('Свой маршрут: {name}, {dist}', { name: title, dist: fmtDist(c.walkKm * 1000) }));
   app.go('route', id);
 }
 

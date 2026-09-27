@@ -1,4 +1,6 @@
 // Прогноз Open-Meteo для двух точек маршрута: старт и высшая точка (с поправкой на высоту)
+import { t } from './i18n.js';
+
 const API = 'https://api.open-meteo.com/v1/forecast';
 const HOURLY = 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,freezing_level_height,uv_index,snowfall,visibility';
 const TTL = 60 * 60e3;
@@ -56,14 +58,14 @@ export const dayOf = (fc, ms) => fc.days.filter((d) => d.t <= ms).pop() ?? fc.da
 
 // Коды погоды WMO
 export function wmo(code) {
-  if (code === 0) return { text: 'Ясно', icon: 'sun' };
-  if (code <= 2) return { text: 'Малооблачно', icon: 'sun' };
-  if (code === 3) return { text: 'Пасмурно', icon: 'cloud' };
-  if (code <= 48) return { text: 'Туман', icon: 'cloud-fog' };
-  if (code <= 57) return { text: 'Морось', icon: 'cloud-rain' };
-  if (code <= 67) return { text: 'Дождь', icon: 'cloud-rain' };
-  if (code <= 77) return { text: 'Снег', icon: 'snowflake' };
-  if (code <= 82) return { text: 'Ливень', icon: 'cloud-rain' };
-  if (code <= 86) return { text: 'Снегопад', icon: 'snowflake' };
-  return { text: code >= 96 ? 'Гроза с градом' : 'Гроза', icon: 'cloud-storm' };
+  if (code === 0) return { text: t('Ясно'), icon: 'sun' };
+  if (code <= 2) return { text: t('Малооблачно'), icon: 'sun' };
+  if (code === 3) return { text: t('Пасмурно'), icon: 'cloud' };
+  if (code <= 48) return { text: t('Туман'), icon: 'cloud-fog' };
+  if (code <= 57) return { text: t('Морось'), icon: 'cloud-rain' };
+  if (code <= 67) return { text: t('Дождь'), icon: 'cloud-rain' };
+  if (code <= 77) return { text: t('Снег'), icon: 'snowflake' };
+  if (code <= 82) return { text: t('Ливень'), icon: 'cloud-rain' };
+  if (code <= 86) return { text: t('Снегопад'), icon: 'snowflake' };
+  return { text: t(code >= 96 ? 'Гроза с градом' : 'Гроза'), icon: 'cloud-storm' };
 }

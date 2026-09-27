@@ -1,8 +1,8 @@
 import { state, save, cache } from '../store.js';
-import { app, on, routeById, age, plan, startMs, online, hasMedical } from '../core.js';
+import { app, on, routeById, age, plan, startMs, online, hasMedical, gw as _gw } from '../core.js';
 import { esc, icon, toast, RISK_CLASS } from '../ui.js';
 import { loadForecast, inWindow, wmo } from '../weather.js';
-import { assessRisk, LEVEL_NAME, expName } from '../risk.js';
+import { assessRisk, expName } from '../risk.js';
 import { gearList } from '../gear.js';
 import { profileSvg, bindProfile } from '../chart.js';
 import { createMap, routeLayer, tilesFor, meMarker } from '../mapview.js';
@@ -10,6 +10,7 @@ import { levelPips } from './routes.js';
 import { fmtTime, fmtHours, fmtDay, dayKey, ago, fromLocal } from '../time.js';
 import { startTrip, enableMountain } from '../safety.js';
 import { pointAt, cumulative } from '../geo.js';
+import { t, num, int } from '../i18n.js';
 
 let fc = null;
 let fcState = 'idle';
@@ -30,22 +31,22 @@ function returnBy(r, from) {
 function days() {
   const now = Date.now();
   return [0, 1, 2, 3].map((i) => {
-    const t = now + i * 86400e3;
-    return { key: dayKey(t), label: i === 0 ? 'Сегодня' : i === 1 ? 'Завтра' : fmtDay(t) };
+    const ms = now + i * 86400e3;
+    return { key: dayKey(ms), label: i === 0 ? t('Сегодня') : i === 1 ? t('Завтра') : fmtDay(ms) };
   });
 }
 
 function forecastPart(r, s) {
   if (fcState === 'loading' && !fc) {
-    return `<div class="wx-strip skeleton" aria-label="Загружаем прогноз">${'<div class="wx"></div>'.repeat(6)}</div>`;
+    return `<div class="wx-strip skeleton" aria-label="${t('Загружаем прогноз')}">${'<div class="wx"></div>'.repeat(6)}</div>`;
   }
   if (!fc) {
-    return `<p class="callout">${icon('wifi-off')}Прогноз не загружен. ${online() ? 'Сервис погоды не ответил.' : 'Нет интернета.'} <button class="link" data-act="wxReload">Повторить</button></p>`;
+    return `<p class="callout">${icon('wifi-off')}${t('Прогноз не загружен.')} ${t(online() ? 'Сервис погоды не ответил.' : 'Нет интернета.')} <button class="link" data-act="wxReload">${t('Повторить')}</button></p>`;
   }
   let hs = inWindow(fc, s, s + r.hours * 3600e3);
-  if (!hs.length) return `<p class="callout">${icon('info-circle')}Прогноз есть на 4 дня вперёд. Выберите дату ближе.</p>`;
+  if (!hs.length) return `<p class="callout">${icon('info-circle')}${t('Прогноз есть на 4 дня вперёд. Выберите дату ближе.')}</p>`;
   if (hs.length > 12) hs = hs.filter((_, i) => i % 2 === 0);
-  return `<div class="wx-strip" role="table" aria-label="Почасовой прогноз на высшей точке">
+  return `<div class="wx-strip" role="table" aria-label="${t('Почасовой прогноз на высшей точке')}">
     ${hs.map((h) => {
       const w = wmo(h.code);
       const bad = h.code >= 95 || h.gust >= 60 ? 'crit' : h.gust >= 40 || h.pop >= 70 || h.feels <= -5 ? 'high' : h.pop >= 40 || h.gust >= 25 ? 'warn' : '';
@@ -58,14 +59,14 @@ function forecastPart(r, s) {
       </div>`;
     }).join('')}
   </div>
-  <p class="small muted">Высшая точка, ${fc.eleTop} м. Внизу (${fc.eleStart} м) до ${Math.round(Math.max(...hs.map((h) => h.tempStart)))}°. Open-Meteo, обновлено ${ago(fc.fetchedAt)}${fc.stale ? ', сохранённая копия' : ''}. <button class="link" data-act="wxReload">Обновить</button></p>`;
+  <p class="small muted">${t('Высшая точка, {top} м. Внизу ({bottom} м) до {c}°. Open-Meteo, обновлено {ago}', { top: int(fc.eleTop), bottom: int(fc.eleStart), c: Math.round(Math.max(...hs.map((h) => h.tempStart))), ago: ago(fc.fetchedAt) })}${fc.stale ? t(', сохранённая копия') : ''}. <button class="link" data-act="wxReload">${t('Обновить')}</button></p>`;
 }
 
 function riskPart(risk) {
   const cls = risk.blocked ? 'crit' : RISK_CLASS[risk.level];
   const ICON = ['circle-check', 'alert-triangle', 'alert-triangle', 'alert-octagon'];
   return `<div class="risk risk-${cls}">
-    <div class="risk-v">${icon(risk.blocked ? 'lock' : ICON[risk.level])}<div><span class="label">Оценка перед выходом</span><b>${risk.verdict}</b></div></div>
+    <div class="risk-v">${icon(risk.blocked ? 'lock' : ICON[risk.level])}<div><span class="label">${t('Оценка перед выходом')}</span><b>${risk.verdict}</b></div></div>
     <ul class="factors">
       ${risk.factors.map((f) => `<li class="f-${RISK_CLASS[f.level]}">${icon(f.icon)}<div><b>${esc(f.title)}</b><span>${esc(f.text)}</span></div></li>`).join('')}
     </ul>
@@ -77,22 +78,22 @@ function gearPart(r, s) {
   const checked = new Set(state.gear[r.id] || []);
   const all = groups.flatMap((g) => g.items);
   const done = all.filter((i) => checked.has(i.id)).length;
-  return `<div class="sec-h"><h2 class="h2">Что надеть и взять</h2><span class="count">${done} из ${all.length}</span></div>
+  return `<div class="sec-h"><h2 class="h2">${t('Что надеть и взять')}</h2><span class="count">${t('{a} из {b}', { a: done, b: all.length })}</span></div>
     ${groups.map((g) => `<fieldset class="gear">
       <legend class="label">${g.title}</legend>
       ${g.items.map((i) => `<label class="gear-i">
         <input type="checkbox" data-gear="${i.id}" ${checked.has(i.id) ? 'checked' : ''}>
         <span class="box" aria-hidden="true">${icon('check')}</span>
-        <span><b>${esc(i.text)}</b>${i.must ? '<em>обязательно</em>' : ''}<small>${esc(i.why)}</small></span>
+        <span><b>${esc(i.text)}</b>${i.must ? `<em>${t('обязательно')}</em>` : ''}<small>${esc(i.why)}</small></span>
       </label>`).join('')}
     </fieldset>`).join('')}`;
 }
 
 function companionsPick() {
-  const peers = Object.values(state.company?.threads || {}).filter((t) => t.status === 'accepted');
-  if (!peers.length) return '<p class="small muted">Идёте с кем-то из «Компании»? Когда заявка принята, попутчика можно отметить здесь: близкие увидят, с кем вы.</p>';
-  return `<fieldset class="field bare"><legend class="field-l">Иду вместе с</legend>
-    ${peers.map((t) => `<label class="check"><input type="checkbox" name="comp" value="${esc(t.peer.name)}" checked><span class="box" aria-hidden="true">${icon('check')}</span><span>${esc(t.peer.name)}, ${t.peer.age}${t.peer.verified ? ' · eGov' : ''}</span></label>`).join('')}
+  const peers = Object.values(state.company?.threads || {}).filter((th) => th.status === 'accepted');
+  if (!peers.length) return `<p class="small muted">${t('Идёте с кем-то из «Компании»? Когда заявка принята, попутчика можно отметить здесь: близкие увидят, с кем вы.')}</p>`;
+  return `<fieldset class="field bare"><legend class="field-l">${t('Иду вместе с')}</legend>
+    ${peers.map((th) => `<label class="check"><input type="checkbox" name="comp" value="${esc(t(th.peer.name))}" checked><span class="box" aria-hidden="true">${icon('check')}</span><span>${esc(t(th.peer.name))}, ${th.peer.age}${th.peer.verified ? ' · eGov' : ''}</span></label>`).join('')}
   </fieldset>`;
 }
 
@@ -103,15 +104,15 @@ function confirmSheet(r) {
   const rb = returnBy(r, now);
   return `<div class="sheet-wrap" data-act="closeStart">
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="st-t" data-stop>
-      <div class="sheet-h"><h2 class="h2" id="st-t">Начать поход</h2><button class="icon-btn" data-act="closeStart" aria-label="Закрыть">${icon('x')}</button></div>
-      <p><b>${esc(r.title)}</b>. Контрольное время <b>${fmtTime(rb)}</b>${from > now + 3600e3 ? ` (считаем от выхода сейчас, а не в ${fmtTime(from)})` : ''}.</p>
-      <p class="muted">Эти люди получат маршрут и контрольное время, а при SOS - ваши координаты и медкарту:</p>
+      <div class="sheet-h"><h2 class="h2" id="st-t">${t('Начать поход')}</h2><button class="icon-btn" data-act="closeStart" aria-label="${t('Закрыть')}">${icon('x')}</button></div>
+      <p><b>${esc(t(r.title))}</b>. ${t('Контрольное время <b>{time}</b>', { time: fmtTime(rb) })}${from > now + 3600e3 ? ` ${t('(считаем от выхода сейчас, а не в {time})', { time: fmtTime(from) })}` : ''}.</p>
+      <p class="muted">${t('Эти люди получат маршрут и контрольное время, а при SOS - ваши координаты и медкарту:')}</p>
       <ul class="list tight">
-        ${p.contacts.map((c) => `<li class="row"><span class="row-ic">${icon(c.guardian ? 'shield-heart' : 'user')}</span><div class="row-t"><b>${esc(c.name)}</b><span class="small muted">${esc(c.phone)}${c.guardian ? ' · законный представитель' : ''}</span></div></li>`).join('')}
+        ${p.contacts.map((c) => `<li class="row"><span class="row-ic">${icon(c.guardian ? 'shield-heart' : 'user')}</span><div class="row-t"><b>${esc(c.name)}</b><span class="small muted">${esc(c.phone)}${c.guardian ? ` · ${t('законный представитель')}` : ''}</span></div></li>`).join('')}
       </ul>
       ${companionsPick()}
-      <label class="check"><input type="checkbox" id="st-mm" checked><span class="box" aria-hidden="true">${icon('check')}</span><span>Включить режим «В горах»: датчики падения, крика, кодового слова и GPS</span></label>
-      <button class="btn btn-primary btn-block btn-lg" data-act="doStart">${icon('walk')}Выхожу на тропу</button>
+      <label class="check"><input type="checkbox" id="st-mm" checked><span class="box" aria-hidden="true">${icon('check')}</span><span>${t('Включить режим «В горах»: датчики падения, крика, кодового слова и GPS')}</span></label>
+      <button class="btn btn-primary btn-block btn-lg" data-act="doStart">${icon('walk')}${t('Выхожу на тропу')}</button>
     </div>
   </div>`;
 }
@@ -126,64 +127,64 @@ function body(r) {
   const tiles = tilesFor(r.line).length;
   const off = state.cache['off:' + r.id];
   return `<header class="page-h">
-      <h1 class="h1">${esc(r.title)}</h1>
-      <div class="page-h-meta">${levelPips(r.level)}<span class="muted small">${icon('flag')}${esc(r.start)}</span></div>
+      <h1 class="h1">${esc(t(r.title))}</h1>
+      <div class="page-h-meta">${levelPips(r.level)}<span class="muted small">${icon('flag')}${esc(t(r.start))}</span></div>
     </header>
     <dl class="stats">
-      <div><dt>Путь</dt><dd>${String(r.walkKm).replace('.', ',')} км</dd><small>${r.kind === 'out' ? 'туда и обратно' : 'кольцо'}</small></div>
-      <div><dt>Набор</dt><dd>${r.up.toLocaleString('ru-RU')} м</dd><small>вверх за день</small></div>
-      <div><dt>Высшая точка</dt><dd>${r.maxEle.toLocaleString('ru-RU')} м</dd><small>старт ${r.profile[0][1].toLocaleString('ru-RU')} м</small></div>
-      <div><dt>Время</dt><dd>${fmtHours(r.hours)}</dd><small>обычный темп</small></div>
+      <div><dt>${t('Путь')}</dt><dd>${t('{n} км', { n: num(r.walkKm, r.walkKm % 1 ? 1 : 0) })}</dd><small>${t(r.kind === 'out' ? 'туда и обратно' : 'кольцо')}</small></div>
+      <div><dt>${t('Набор')}</dt><dd>${t('{n} м', { n: int(r.up) })}</dd><small>${t('вверх за день')}</small></div>
+      <div><dt>${t('Высшая точка')}</dt><dd>${t('{n} м', { n: int(r.maxEle) })}</dd><small>${t('старт {n} м', { n: int(r.profile[0][1]) })}</small></div>
+      <div><dt>${t('Время')}</dt><dd>${fmtHours(r.hours)}</dd><small>${t('обычный темп')}</small></div>
     </dl>
     <section class="card chart-card">
-      <div class="sec-h"><h2 class="h3">Профиль высот</h2><span class="small muted">${r.kind === 'out' ? 'в одну сторону' : 'всё кольцо'}</span></div>
+      <div class="sec-h"><h2 class="h3">${t('Профиль высот')}</h2><span class="small muted">${t(r.kind === 'out' ? 'в одну сторону' : 'всё кольцо')}</span></div>
       <div class="chart-box">${profileSvg(r, { hereKm: onTrip && state.trip.progress ? Math.min(state.trip.progress / 1000, r.km) : null })}<div class="ch-tip" hidden></div></div>
     </section>
     <section class="sec">
-      <p>${esc(r.text)}</p>
-      <ul class="hazards">${r.hazards.map((h) => `<li>${icon('alert-triangle')}${esc(h)}</li>`).join('')}</ul>
+      <p>${esc(t(r.text))}</p>
+      <ul class="hazards">${r.hazards.map((h) => `<li>${icon('alert-triangle')}${esc(t(h))}</li>`).join('')}</ul>
     </section>
     <section class="sec">
-      <h2 class="h2">Когда идёте</h2>
-      <div class="chips" role="group" aria-label="День">
+      <h2 class="h2">${t('Когда идёте')}</h2>
+      <div class="chips" role="group" aria-label="${t('День')}">
         ${days().map((d) => `<button class="chip ${p.day === d.key ? 'on' : ''}" data-act="day" data-arg="${d.key}" aria-pressed="${p.day === d.key}">${d.label}</button>`).join('')}
       </div>
       <div class="when">
-        <div class="field"><label for="pl-time">Выход</label>
-          <select id="pl-time" class="input" data-plan="time">${TIMES.map((t) => `<option ${t === p.time ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-        <div class="field"><span class="field-l" id="pl-g">Людей в группе</span>
-          <div class="stepper" role="group" aria-labelledby="pl-g"><button class="icon-btn" data-act="group" data-arg="-1" aria-label="Меньше">${icon('minus')}</button><b>${p.group}</b><button class="icon-btn" data-act="group" data-arg="1" aria-label="Больше">${icon('plus')}</button></div></div>
+        <div class="field"><label for="pl-time">${t('Выход')}</label>
+          <select id="pl-time" class="input" data-plan="time">${TIMES.map((x) => `<option ${x === p.time ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><span class="field-l" id="pl-g">${t('Людей в группе')}</span>
+          <div class="stepper" role="group" aria-labelledby="pl-g"><button class="icon-btn" data-act="group" data-arg="-1" aria-label="${t('Меньше')}">${icon('minus')}</button><b>${p.group}</b><button class="icon-btn" data-act="group" data-arg="1" aria-label="${t('Больше')}">${icon('plus')}</button></div></div>
       </div>
-      <p class="small muted">Возвращение около ${fmtTime(s + r.hours * 3600e3)} · опыт: ${expName(state.profile?.experience || 'novice', state.profile?.gender).toLowerCase()}</p>
+      <p class="small muted">${t('Возвращение около {time} · опыт: {exp}', { time: fmtTime(s + r.hours * 3600e3), exp: expName(state.profile?.experience || 'novice', state.profile?.gender).toLowerCase() })}</p>
     </section>
     <section class="sec">
-      <div class="sec-h"><h2 class="h2">Погода наверху</h2></div>
+      <div class="sec-h"><h2 class="h2">${t('Погода наверху')}</h2></div>
       ${forecastPart(r, s)}
     </section>
     <section class="sec">${riskPart(risk)}</section>
     <section class="sec">${gearPart(r, s)}</section>
     <section class="sec">
-      <h2 class="h2">Контрольное время</h2>
+      <h2 class="h2">${t('Контрольное время')}</h2>
       <div class="ctrl">
-        <button class="icon-btn" data-act="buffer" data-arg="-30" aria-label="Раньше на 30 минут">${icon('minus')}</button>
-        <div><b class="ctrl-v">${fmtTime(rb)}</b><span class="small muted">запас ${state.plan.buffer ?? 60} мин после расчётного возвращения</span></div>
-        <button class="icon-btn" data-act="buffer" data-arg="30" aria-label="Позже на 30 минут">${icon('plus')}</button>
+        <button class="icon-btn" data-act="buffer" data-arg="-30" aria-label="${t('Раньше на 30 минут')}">${icon('minus')}</button>
+        <div><b class="ctrl-v">${fmtTime(rb)}</b><span class="small muted">${t('запас {m} мин после расчётного возвращения', { m: state.plan.buffer ?? 60 })}</span></div>
+        <button class="icon-btn" data-act="buffer" data-arg="30" aria-label="${t('Позже на 30 минут')}">${icon('plus')}</button>
       </div>
-      <p class="small muted">Не отметитесь «Я вернулся» к этому времени - приложение спросит, всё ли в порядке, а затем сообщит близким вашу последнюю точку.</p>
+      <p class="small muted">${t(_gw('Не отметитесь «Я вернулся» к этому времени - приложение спросит, всё ли в порядке, а затем сообщит близким вашу последнюю точку.', 'Не отметитесь «Я вернулась» к этому времени - приложение спросит, всё ли в порядке, а затем сообщит близким вашу последнюю точку.'))}</p>
     </section>
     <section class="sec">
-      <h2 class="h2">Без интернета</h2>
-      <p class="small muted">Трек, точки, памятки и прогноз уже сохранены на телефоне. Подложку карты можно скачать заранее.</p>
-      <button class="btn btn-block" data-act="offline" ${offline ? 'disabled' : ''}>${icon('cloud-download')}${offline ? `Скачиваем ${offline.done} из ${offline.total}…` : off ? `Карта сохранена ${ago(off.at)}, обновить` : `Сохранить карту маршрута (${tiles} фрагментов)`}</button>
+      <h2 class="h2">${t('Без интернета')}</h2>
+      <p class="small muted">${t('Трек, точки, памятки и прогноз уже сохранены на телефоне. Подложку карты можно скачать заранее.')}</p>
+      <button class="btn btn-block" data-act="offline" ${offline ? 'disabled' : ''}>${icon('cloud-download')}${offline ? t('Скачиваем {a} из {b}…', { a: offline.done, b: offline.total }) : off ? t('Карта сохранена {ago}, обновить', { ago: ago(off.at) }) : t('Сохранить карту маршрута ({n} фрагментов)', { n: tiles })}</button>
     </section>
     <div class="cta-bar">
       ${onTrip
-        ? `<button class="btn btn-primary btn-block btn-lg" data-go="home">${icon('walk')}Поход идёт · на главную</button>`
+        ? `<button class="btn btn-primary btn-block btn-lg" data-go="home">${icon('walk')}${t('Поход идёт · на главную')}</button>`
         : risk.blocked
-          ? `<button class="btn btn-block btn-lg" disabled>${icon('lock')}Недоступно по возрасту</button>`
+          ? `<button class="btn btn-block btn-lg" disabled>${icon('lock')}${t('Недоступно по возрасту')}</button>`
           : state.trip
-            ? `<button class="btn btn-block btn-lg" disabled>Сначала завершите текущий поход</button>`
-            : `<button class="btn ${risk.level >= 3 ? 'btn-warn' : 'btn-primary'} btn-block btn-lg" data-act="start">${icon('walk')}${risk.level >= 3 ? 'Начать, несмотря на риск' : 'Начать поход'}</button>`}
+            ? `<button class="btn btn-block btn-lg" disabled>${t('Сначала завершите текущий поход')}</button>`
+            : `<button class="btn ${risk.level >= 3 ? 'btn-warn' : 'btn-primary'} btn-block btn-lg" data-act="start">${icon('walk')}${t(risk.level >= 3 ? 'Начать, несмотря на риск' : 'Начать поход')}</button>`}
     </div>
     ${confirmOpen ? confirmSheet(r) : ''}`;
 }
@@ -226,8 +227,8 @@ export default {
   title: 'Маршрут',
   render(id) {
     const r = routeById(id);
-    if (!r) return '<div class="pad"><p>Маршрут не найден.</p></div>';
-    return `<div class="route-map" data-map aria-label="Карта маршрута"></div>
+    if (!r) return `<div class="pad"><p>${t('Маршрут не найден.')}</p></div>`;
+    return `<div class="route-map" data-map aria-label="${t('Карта маршрута')}"></div>
       <div class="pad stack" data-part="route-body"></div>`;
   },
   mount(root, id) {
@@ -294,7 +295,7 @@ on({
     const comps = [...document.querySelectorAll('input[name="comp"]:checked')].map((i) => i.value);
     confirmOpen = false;
     startTrip(r.id, returnBy(r, Date.now()), Math.max(plan().group, comps.length + 1), comps);
-    toast('Поход начат. Близкие получили маршрут');
+    toast(t('Поход начат. Близкие получили маршрут'));
     app.go('home');
     if (mm && !state.mountain) await enableMountain();
   },
@@ -323,9 +324,9 @@ on({
     if (fail < urls.length / 2) {
       state.cache['off:' + r.id] = { at: Date.now(), n: urls.length - fail };
       save();
-      toast(`Карта сохранена: ${urls.length - fail} фрагментов`);
+      toast(t('Карта сохранена: {n} фрагментов', { n: urls.length - fail }));
     } else {
-      toast('Не удалось скачать карту. Проверьте интернет');
+      toast(t('Не удалось скачать карту. Проверьте интернет'));
     }
     drawBody();
   },
@@ -349,7 +350,7 @@ export function onGearToggle(el) {
   save();
   const count = document.querySelector('.count');
   const total = document.querySelectorAll('[data-gear]').length;
-  if (count) count.textContent = `${set.size} из ${total}`;
+  if (count) count.textContent = t('{a} из {b}', { a: set.size, b: total });
 }
 
 export { fromLocal };
