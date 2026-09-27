@@ -113,15 +113,15 @@ export async function buildContext(parsed, now = Date.now()) {
   const a = age();
   const lines = [`Язык интерфейса: ${LANG_NAME[lang()]}.`, `Сейчас: ${dateRu(now)} (${['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][new Date(now + 5 * 3600e3).getUTCDay()]}), ${fmtTime(now)} по Алматы.`];
   lines.push(`Пользователь: ${a} лет${a < 18 ? ' (подросток: только лёгкие и средние маршруты, родители получают уведомления)' : ''}, пол ${p.gender === 'f' ? 'женский' : 'мужской'} (обращайся в этом роде), опыт в горах: ${EXP_RU[p.experience || 'novice']}.`);
-  const t = state.trip;
-  if (t) {
-    const tr = routeById(t.routeId);
-    lines.push(`Сейчас в походе: ${tr?.title}, вышел в ${fmtTime(t.startedAt)}, контрольное время ${fmtTime(t.returnBy)}${t.progress ? `, пройдено ${(t.progress / 1000).toFixed(1)} км` : ''}${t.companions?.length ? `, идёт с: ${t.companions.join(', ')}` : ''}.`);
+  const trip = state.trip;
+  if (trip) {
+    const tr = routeById(trip.routeId);
+    lines.push(`Сейчас в походе: ${tr?.title}, вышел в ${fmtTime(trip.startedAt)}, контрольное время ${fmtTime(trip.returnBy)}${trip.progress ? `, пройдено ${(trip.progress / 1000).toFixed(1)} км` : ''}${trip.companions?.length ? `, идёт с: ${trip.companions.join(', ')}` : ''}.`);
   }
   const r = routeById(parsed.routeId) || activeRoute();
   if (r) {
     let { start } = resolveStart(parsed, now);
-    if (t && t.routeId === r.id && parsed.offset == null && !parsed.time) start = t.startedAt;
+    if (trip && trip.routeId === r.id && parsed.offset == null && !parsed.time) start = trip.startedAt;
     const end = start + r.hours * 3600e3;
     lines.push(`Маршрут: ${r.title} (${LVL_RU[r.level]}${r.custom ? ', свой маршрут пользователя, линия по прямой' : ''}). Путь ${r.walkKm} км ${r.kind === 'out' ? 'туда и обратно' : 'по кольцу'}, набор ${r.up} м, старт ${r.profile[0][1]} м, высшая точка ${r.maxEle} м, обычное время ${hoursRu(r.hours)}. Старт: ${r.start}. Опасности: ${r.hazards.join('; ')}.`);
     lines.push(`${routeAllowed(r, a) ? '' : 'ВНИМАНИЕ: маршрут закрыт для возраста пользователя. '}Разбираем выход: ${dateRu(start)} в ${fmtTime(start)}, возвращение около ${fmtTime(end)}.`);
