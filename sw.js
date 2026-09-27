@@ -1,5 +1,5 @@
 // Офлайн: оболочка приложения в кэше, тайлы карты и шрифты кэшируются при просмотре, прогноз - последняя копия
-const VERSION = 'ts-v2';
+const VERSION = 'ts-v3';
 const SHELL = [
   './', 'index.html', 'guardian.html', 'manifest.webmanifest', 'icon.svg', 'css/app.css',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/qrcode.js',
@@ -12,16 +12,36 @@ const SHELL = [
   'js/views/alert.js', 'js/views/demo.js',
 ];
 const TILES = 'ts-tiles';
+const FONTS = 'ts-fonts-2';
+const FONT_CSS = 'https://fonts.googleapis.com/css2?family=Sofia+Sans:wght@400;500;600;700;800&family=Sofia+Sans+Extra+Condensed:wght@700;800;900&family=JetBrains+Mono:wght@500;600&display=swap';
 const MAX_TILES = 3000;
 
+// Шрифты кладём в кэш сразу: кириллица и латиница, чтобы офлайн не было системных шрифтов
+async function cacheFonts() {
+  try {
+    const c = await caches.open(FONTS);
+    const res = await fetch(FONT_CSS, { mode: 'cors' });
+    if (!res.ok) return;
+    const css = await res.clone().text();
+    await c.put(FONT_CSS, res);
+    const urls = css.split('/* ').slice(1)
+      .filter((block) => /^(cyrillic|cyrillic-ext|latin) \*\//.test(block))
+      .map((block) => block.match(/url\((https:[^)]+)\)/)?.[1])
+      .filter(Boolean);
+    await Promise.all(urls.map((u) => fetch(u, { mode: 'cors' }).then((r) => r.ok && c.put(u, r)).catch(() => {})));
+  } catch {
+    // без сети при установке: шрифты докэшируются при просмотре
+  }
+}
+
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(cacheFonts).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== TILES && k !== 'ts-fonts' && k !== 'ts-api').map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![VERSION, TILES, FONTS, 'ts-api'].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -34,10 +54,10 @@ async function trim(name, max) {
 
 async function cacheFirst(req, name) {
   const c = await caches.open(name);
-  const hit = await c.match(req);
+  const hit = await c.match(req, { ignoreVary: true });
   if (hit) return hit;
   const res = await fetch(req);
-  if (res.ok || res.type === 'opaque') {
+  if (res.ok) {
     c.put(req, res.clone());
     if (name === TILES && Math.random() < 0.05) trim(TILES, MAX_TILES);
   }
@@ -64,7 +84,7 @@ self.addEventListener('fetch', (e) => {
   if (/tile\.(opentopomap|openstreetmap)\.org$/.test(url.hostname)) {
     e.respondWith(cacheFirst(req, TILES));
   } else if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    e.respondWith(cacheFirst(req, 'ts-fonts'));
+    e.respondWith(cacheFirst(req, FONTS));
   } else if (url.hostname === 'api.open-meteo.com') {
     e.respondWith(networkFirst(req, 'ts-api'));
   } else if (url.origin === self.location.origin) {
